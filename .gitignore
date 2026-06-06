@@ -6,3 +6,4 @@ __pycache__/
 .env
 credentials.json
 *.csv
+db.sqlite3

@@ -1,0 +1,9 @@
+django>=5.0,<6.0
+djangorestframework
+django-cors-headers
+streamlit
+pandas
+requests
+gspread
+oauth2client
+openpyxl                       # baca excel jika perlu

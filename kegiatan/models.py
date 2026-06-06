@@ -8,5 +8,3 @@ class Kegiatan(models.Model):
     
     def __str__(self):
         return f"{self.tanggal} - {self.kegiatan}"
-
-
