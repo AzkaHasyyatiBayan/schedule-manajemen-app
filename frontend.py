@@ -1,104 +1,53 @@
 import streamlit as st
 import pandas as pd
 import requests
+import re
 from datetime import datetime, date, timedelta
 from collections import defaultdict
 
 # ---------- Konfigurasi Halaman ----------
-st.set_page_config(
-    page_title="Puskesmas Sangkali",
-    page_icon="🏥",
-    layout="wide"
-)
+st.set_page_config(page_title="Puskesmas Sangkali", page_icon="🏥", layout="wide")
 
 # ---------- CSS + Font Awesome ----------
 st.html("""
-<link rel="stylesheet"
-  href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
 <style>
   .main-header {
     background: linear-gradient(135deg, #14532d 0%, #166534 100%);
-    padding: 2rem;
-    border-radius: 20px;
-    color: white;
-    text-align: center;
-    margin-bottom: 2rem;
+    padding: 2rem; border-radius: 20px; color: white;
+    text-align: center; margin-bottom: 2rem;
   }
   .main-header h1 { margin: 0; }
-  .data-card {
-    background: white;
-    padding: 1.5rem;
-    border-radius: 16px;
-    border: 1px solid #e5e7eb;
-    margin-bottom: 1rem;
-  }
-  .result-box {
-    background: #f8fafc;
-    padding: 1rem;
-    border-radius: 12px;
-    border-left: 5px solid #14532d;
-    margin: 0.5rem 0;
-  }
+  .data-card { background: white; padding: 1.5rem; border-radius: 16px;
+               border: 1px solid #e5e7eb; margin-bottom: 1rem; }
+  .result-box { background: #f8fafc; padding: 1rem; border-radius: 12px;
+                border-left: 5px solid #14532d; margin: 0.5rem 0; }
   .icon-text i { margin-right: 8px; color: #14532d; }
   .logo-container { display: flex; justify-content: center; margin-bottom: 1rem; }
-  .badge-online {
-    display: inline-block; background: #dcfce7; color: #15803d;
-    font-size: 0.75rem; font-weight: 600; padding: 2px 10px;
-    border-radius: 999px;
-  }
-  .badge-offline {
-    display: inline-block; background: #fee2e2; color: #dc2626;
-    font-size: 0.75rem; font-weight: 600; padding: 2px 10px;
-    border-radius: 999px;
-  }
-  .svg-icon {
-    display: inline-block;
-    vertical-align: middle;
-    margin-right: 6px;
-  }
+  .badge-online { display: inline-block; background: #dcfce7; color: #15803d;
+                  font-size: 0.75rem; font-weight: 600; padding: 2px 10px; border-radius: 999px; }
+  .badge-offline { display: inline-block; background: #fee2e2; color: #dc2626;
+                   font-size: 0.75rem; font-weight: 600; padding: 2px 10px; border-radius: 999px; }
+  .svg-icon { display: inline-block; vertical-align: middle; margin-right: 6px; }
   .past { color: #9ca3af; }
   .today { color: #15803d; font-weight: bold; }
   .tomorrow { color: #2563eb; }
   .future { color: #111827; }
   .reduced-link { color: #6b7280; font-style: italic; font-size: 0.9rem; }
-  .notification-card {
-    background: #dcfce7;
-    border: 1px solid #bbf7d0;
-    padding: 1rem;
-    border-radius: 12px;
-    margin-bottom: 1rem;
-  }
-  .notification-card ul {
-    margin-top: 0.5rem;
-    padding-left: 1.5rem;
-  }
-  .notification-card li {
-    margin-bottom: 0.25rem;
-  }
-  .center-red-btn {
-    display: flex;
-    justify-content: center;
-    margin: 1rem 0;
-  }
-  .center-red-btn button {
-    background-color: #dc2626 !important;
-    color: white !important;
-    border: none !important;
-    font-weight: 500;
-    padding: 0.4rem 1.5rem !important;
-    border-radius: 8px;
-    width: auto !important;
-  }
-  .center-red-btn button:hover {
-    background-color: #b91c1c !important;
-  }
+  .notification-card { background: #dcfce7; border: 1px solid #bbf7d0;
+                       padding: 1rem; border-radius: 12px; margin-bottom: 1rem; }
+  .notification-card ul { margin-top: 0.5rem; padding-left: 1.5rem; }
+  .notification-card li { margin-bottom: 0.25rem; }
+  .center-red-btn { display: flex; justify-content: center; margin: 1rem 0; }
+  .center-red-btn button { background-color: #dc2626 !important; color: white !important;
+                           border: none !important; font-weight: 500;
+                           padding: 0.4rem 1.5rem !important; border-radius: 8px; width: auto !important; }
+  .center-red-btn button:hover { background-color: #b91c1c !important; }
 </style>
 """)
 
-# ---------- Konstanta ----------
 API_BASE = "http://localhost:8000/api"
 
-# Daftar pegawai Puskesmas Sangkali
 DAFTAR_NAMA = [
     "Isep Deni Herdian, S.Kep.,MMRS",
     "Isep Suhendar,SKM",
@@ -158,22 +107,18 @@ for key, default in [
     ('page', 'user'),
     ('edit_data', None),
     ('last_csv_url', ''),
-    ('notif', None),                # untuk menampung notifikasi sukses
-    ('pending_delete_ids', []),     # menyimpan ID yang akan dihapus (massal)
+    ('notif', None),
+    ('pending_delete_ids', []),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
 
-# ---------- Cek token dari URL (persist session) ----------
+# ---------- Cek token dari URL ----------
 params = st.query_params
 if not st.session_state.logged_in and 'token' in params:
     token = params['token']
     try:
-        resp = requests.get(
-            f"{API_BASE}/verify-token/",
-            headers={"Authorization": f"Token {token}"},
-            timeout=5
-        )
+        resp = requests.get(f"{API_BASE}/verify-token/", headers={"Authorization": f"Token {token}"}, timeout=5)
         if resp.status_code == 200:
             data = resp.json()
             st.session_state.logged_in = True
@@ -205,21 +150,16 @@ def api_put(path, data):
 def api_delete(path):
     return requests.delete(f"{API_BASE}/{path}", headers=auth_headers(), timeout=10)
 
-def get_nama_dari_data():
-    """Ambil nama-nama penyerta dari data kegiatan yang sudah ada."""
-    try:
-        r = requests.get(f"{API_BASE}/search-user/", timeout=5)
-        semua = r.json() if r.status_code == 200 else []
-    except:
-        semua = []
-    nama_set = set()
-    for d in semua:
-        for n in str(d.get('penyerta','')).split(','):
-            n = n.strip()
-            if n: nama_set.add(n)
-    return sorted(nama_set)
+def parse_penyerta(teks):
+    """Pisahkan nama penyerta. Prioritas: titik koma, lalu koma+spasi+kapital."""
+    if not teks:
+        return []
+    if ';' in teks:
+        return [p.strip() for p in teks.split(';') if p.strip()]
+    # Fallback: koma diikuti spasi dan huruf besar
+    parts = re.split(r', (?=[A-Z])', teks)
+    return [p.strip() for p in parts if p.strip()]
 
-# ---------- Tampilkan notif yang tersimpan (jika ada) ----------
 if st.session_state.notif:
     st.toast(st.session_state.notif, icon="✅")
     st.session_state.notif = None
@@ -240,13 +180,10 @@ with st.sidebar:
     except:
         st.warning("Logo tidak ditemukan (assets/logo.png)")
     st.markdown('</div>', unsafe_allow_html=True)
-
     st.title("Menu")
-
     if st.button("Jadwal Kegiatan", use_container_width=True):
         st.session_state.page = "user"
         st.rerun()
-
     if not st.session_state.logged_in:
         if st.button("Login Admin", use_container_width=True):
             st.session_state.page = "admin_login"
@@ -267,7 +204,6 @@ with st.sidebar:
             st.session_state.page = "user"
             st.query_params.clear()
             st.rerun()
-
     st.markdown("---")
     try:
         r = requests.get(f"{API_BASE}/jadwal-terdekat/", timeout=3)
@@ -289,33 +225,18 @@ if st.session_state.page == "user":
             jadwal = resp_notif.json()
             notif_hari_ini = [j for j in jadwal if j['tanggal'] == str(today)]
             notif_besok = [j for j in jadwal if j['tanggal'] == str(tomorrow)]
-
             if notif_hari_ini:
                 items = ''.join(f"<li>{j['kegiatan']} di {j['lokasi']}</li>" for j in notif_hari_ini)
-                st.markdown(f"""
-                <div class="notification-card">
-                    <i class="fa-solid fa-circle-exclamation"></i>
-                    <b>Hari ini ada kegiatan:</b>
-                    <ul>{items}</ul>
-                </div>
-                """, unsafe_allow_html=True)
-
+                st.markdown(f"<div class='notification-card'><i class='fa-solid fa-circle-exclamation'></i><b>Hari ini ada kegiatan:</b><ul>{items}</ul></div>", unsafe_allow_html=True)
             if notif_besok:
                 items = ''.join(f"<li>{j['kegiatan']} di {j['lokasi']}</li>" for j in notif_besok)
-                st.markdown(f"""
-                <div class="notification-card" style="background:#eff6ff; border-color:#bfdbfe;">
-                    <i class="fa-solid fa-calendar-check"></i>
-                    <b>Besok (H-1):</b>
-                    <ul>{items}</ul>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f"<div class='notification-card' style='background:#eff6ff; border-color:#bfdbfe;'><i class='fa-solid fa-calendar-check'></i><b>Besok (H-1):</b><ul>{items}</ul></div>", unsafe_allow_html=True)
     except:
         pass
 
     st.markdown("""
     <div class="icon-text" style="margin-bottom:0.5rem">
-      <svg class="svg-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#14532d" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round">
+      <svg class="svg-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#14532d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
       </svg>
       <span style="font-size:1.5rem; font-weight:600;">Cari Jadwal Kegiatan</span>
@@ -324,14 +245,8 @@ if st.session_state.page == "user":
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        # Gabung nama dari data real + daftar pegawai baru, tanpa duplikasi
-        nama_dari_data = get_nama_dari_data()
-        nama_gabungan = nama_dari_data + [n for n in DAFTAR_NAMA if n not in set(nama_dari_data)]
-        if not nama_gabungan:
-            nama_gabungan = DAFTAR_NAMA  # fallback jika tidak ada data real
-
         with st.form("user_form"):
-            nama    = st.selectbox("Nama Lengkap", nama_gabungan)
+            nama    = st.selectbox("Nama Lengkap", DAFTAR_NAMA)
             tanggal = st.date_input("Tanggal Kegiatan", datetime.now().date())
             if st.form_submit_button("Cari Jadwal"):
                 try:
@@ -341,11 +256,14 @@ if st.session_state.page == "user":
                         if hasil:
                             st.success(f"Halo {nama}")
                             for h in hasil:
+                                # parsing penyerta yang lebih baik
+                                peny_list = parse_penyerta(h['penyerta'])
+                                peny_items = ''.join(f"<li>{p}</li>" for p in peny_list)
                                 st.markdown(f"""
                                 <div class="result-box">
                                     <b>Lokasi:</b> {h['lokasi']}<br>
                                     <b>Kegiatan:</b> {h['kegiatan']}<br>
-                                    <b>Penyerta:</b> {h['penyerta']}
+                                    <b>Penyerta:</b><ul>{peny_items}</ul>
                                 </div>
                                 """, unsafe_allow_html=True)
                         else:
@@ -359,8 +277,7 @@ if st.session_state.page == "user":
         st.markdown("""
         <div class="data-card">
             <div class="icon-text">
-              <svg class="svg-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#14532d" stroke-width="2"
-                   stroke-linecap="round" stroke-linejoin="round">
+              <svg class="svg-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#14532d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
               </svg>
               <span style="font-weight:600;">Informasi</span>
@@ -369,44 +286,10 @@ if st.session_state.page == "user":
         </div>
         """, unsafe_allow_html=True)
 
-        # SVG kalender dekoratif
-        st.html("""
-        <div style="text-align:center;margin-top:1rem">
-        <svg viewBox="0 0 100 95" width="110" xmlns="http://www.w3.org/2000/svg">
-          <rect x="5" y="15" width="90" height="75" rx="8" fill="#f8fafc" stroke="#14532d" stroke-width="2"/>
-          <rect x="5" y="15" width="90" height="24" rx="8" fill="#14532d"/>
-          <rect x="5" y="28" width="90" height="11" fill="#14532d"/>
-          <text x="50" y="31" text-anchor="middle" fill="white" font-size="9"
-                font-weight="bold" font-family="sans-serif">JUNI 2026</text>
-          <rect x="28" y="9" width="6" height="16" rx="3" fill="#166534"/>
-          <rect x="66" y="9" width="6" height="16" rx="3" fill="#166534"/>
-          <text x="13"  y="52" fill="#9ca3af" font-size="6.5" font-family="sans-serif">Min</text>
-          <text x="27"  y="52" fill="#9ca3af" font-size="6.5" font-family="sans-serif">Sen</text>
-          <text x="41"  y="52" fill="#9ca3af" font-size="6.5" font-family="sans-serif">Sel</text>
-          <text x="55"  y="52" fill="#9ca3af" font-size="6.5" font-family="sans-serif">Rab</text>
-          <text x="67"  y="52" fill="#9ca3af" font-size="6.5" font-family="sans-serif">Kam</text>
-          <text x="81"  y="52" fill="#9ca3af" font-size="6.5" font-family="sans-serif">Jum</text>
-          <text x="41"  y="65" fill="#374151" font-size="8" font-family="sans-serif">3</text>
-          <text x="55"  y="65" fill="#374151" font-size="8" font-family="sans-serif">4</text>
-          <text x="69"  y="65" fill="#374151" font-size="8" font-family="sans-serif">5</text>
-          <circle cx="88" cy="62" r="7" fill="#14532d"/>
-          <text x="88" y="65" text-anchor="middle" fill="white"
-                font-size="8" font-weight="bold" font-family="sans-serif">6</text>
-          <text x="13"  y="80" fill="#374151" font-size="8" font-family="sans-serif">8</text>
-          <text x="27"  y="80" fill="#374151" font-size="8" font-family="sans-serif">9</text>
-          <text x="39"  y="80" fill="#374151" font-size="8" font-family="sans-serif">10</text>
-          <text x="53"  y="80" fill="#374151" font-size="8" font-family="sans-serif">11</text>
-          <text x="67"  y="80" fill="#374151" font-size="8" font-family="sans-serif">12</text>
-          <text x="81"  y="80" fill="#374151" font-size="8" font-family="sans-serif">13</text>
-        </svg>
-        </div>
-        """)
-
     # Jadwal terdekat
     st.markdown("""
     <div class="icon-text" style="margin-top:1.5rem; margin-bottom:0.5rem">
-      <svg class="svg-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#14532d" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round">
+      <svg class="svg-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#14532d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/>
         <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
       </svg>
@@ -443,7 +326,6 @@ elif st.session_state.page == "admin_login":
           <h2 style="margin-top:0.2rem; color:#14532d;">Login Admin</h2>
         </div>
         """, unsafe_allow_html=True)
-
         with st.form("login_form"):
             username = st.text_input("Username")
             password = st.text_input("Password", type="password")
@@ -478,8 +360,7 @@ elif st.session_state.page == "admin_dashboard":
 
     st.markdown("""
     <div class="icon-text" style="margin-bottom:0.5rem">
-      <svg class="svg-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#14532d" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round">
+      <svg class="svg-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#14532d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
         <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
       </svg>
@@ -493,7 +374,7 @@ elif st.session_state.page == "admin_dashboard":
         "History", "Randomize (Dalam Gedung)"
     ])
 
-    # ── Tab 1: Input Manual ──
+    # ── Tab 1: Input Manual (dengan multiselect penyerta) ──
     with tab1:
         with st.form("input_form"):
             col1, col2 = st.columns(2)
@@ -502,7 +383,18 @@ elif st.session_state.page == "admin_dashboard":
                 lokasi = st.text_input("Lokasi")
             with col2:
                 kegiatan = st.text_input("Nama Kegiatan")
-                penyerta = st.text_area("Penyerta", height=100)
+                # Multiselect untuk memilih penyerta
+                penyerta_terpilih = st.multiselect(
+                    "Pilih Penyerta (bisa lebih dari satu)",
+                    options=DAFTAR_NAMA,
+                    placeholder="Ketik nama atau pilih dari daftar"
+                )
+                # Jika tidak dipilih, beri opsi input manual
+                if not penyerta_terpilih:
+                    penyerta = st.text_area("Atau tulis manual (pisahkan dengan ;)", height=80)
+                else:
+                    penyerta = "; ".join(penyerta_terpilih)
+                    st.caption(f"Penyerta: {penyerta}")
             if st.form_submit_button("Simpan"):
                 if not lokasi or not kegiatan:
                     st.error("Lokasi dan Nama Kegiatan wajib diisi.")
@@ -522,16 +414,13 @@ elif st.session_state.page == "admin_dashboard":
                     except Exception as e:
                         st.error(f"Error: {e}")
 
-    # ── Tab 2: Google Sheet (dengan link tersimpan) ──
+    # ── Tab 2: Google Sheet ──
     with tab2:
-        st.markdown('<h4><i class="fa-solid fa-cloud-arrow-up"></i> Sync dari Google Spreadsheet</h4>',
-                    unsafe_allow_html=True)
+        st.markdown('<h4><i class="fa-solid fa-cloud-arrow-up"></i> Sync dari Google Spreadsheet</h4>', unsafe_allow_html=True)
         st.caption("File > Share > Publish to web > CSV > Copy link")
-        st.info("Kolom yang diperlukan: `tanggal`, `lokasi`, `kegiatan`, `penyerta`")
-
+        st.info("Kolom: `tanggal`, `lokasi`, `kegiatan`, `penyerta` (penyerta dipisah titik koma)")
         if st.session_state.last_csv_url:
-            st.markdown(f"<p class='reduced-link'>Link tersimpan: {st.session_state.last_csv_url}</p>",
-                        unsafe_allow_html=True)
+            st.markdown(f"<p class='reduced-link'>Link tersimpan: {st.session_state.last_csv_url}</p>", unsafe_allow_html=True)
             col_upd, col_del = st.columns(2)
             with col_upd:
                 if st.button("Update Link", use_container_width=True):
@@ -540,49 +429,36 @@ elif st.session_state.page == "admin_dashboard":
                 if st.button("Hapus Link", use_container_width=True):
                     st.session_state.last_csv_url = ""
                     st.rerun()
-
             show_input = st.session_state.get('show_csv_input', False)
             if show_input:
                 csv_url = st.text_input("Link CSV terpublikasi (baru)", key="csv_url_new")
-                sync_mode = st.radio("Mode sinkronisasi",
-                                     ['append', 'replace'],
-                                     format_func=lambda x: "Tambahkan saja (jaga data lama)" if x == 'append' else "Ganti semua data",
-                                     horizontal=True)
-                if st.button("Simpan & Sync", key="btn_update"):
+                sync_mode = st.radio("Mode", ['append', 'replace'], horizontal=True,
+                                     format_func=lambda x: "Tambahkan saja" if x=='append' else "Ganti semua")
+                if st.button("Simpan & Sync"):
                     if csv_url:
-                        with st.spinner("Menyinkronkan..."):
-                            resp = api_post("sync-sheets/",
-                                            {"csv_url": csv_url, "mode": sync_mode},
-                                            auth=True)
+                        with st.spinner("Sync..."):
+                            resp = api_post("sync-sheets/", {"csv_url": csv_url, "mode": sync_mode}, auth=True)
                             if resp.status_code == 200:
                                 st.session_state.last_csv_url = csv_url
                                 st.session_state.show_csv_input = False
                                 st.session_state.notif = "Data Google Sheet berhasil disinkronkan!"
                                 st.rerun()
                             else:
-                                st.error(resp.json().get('error', 'Gagal'))
-                    else:
-                        st.warning("Masukkan URL")
+                                st.error(resp.json().get('error'))
         else:
             csv_url = st.text_input("Link CSV terpublikasi", key="csv_url_blank")
-            sync_mode = st.radio("Mode sinkronisasi",
-                                 ['append', 'replace'],
-                                 format_func=lambda x: "Tambahkan saja (jaga data lama)" if x == 'append' else "Ganti semua data",
-                                 horizontal=True)
+            sync_mode = st.radio("Mode", ['append', 'replace'], horizontal=True,
+                                 format_func=lambda x: "Tambahkan saja" if x=='append' else "Ganti semua")
             if st.button("Ambil & Simpan Data"):
                 if csv_url:
-                    with st.spinner("Mengambil data..."):
-                        resp = api_post("sync-sheets/",
-                                        {"csv_url": csv_url, "mode": sync_mode},
-                                        auth=True)
+                    with st.spinner("Sync..."):
+                        resp = api_post("sync-sheets/", {"csv_url": csv_url, "mode": sync_mode}, auth=True)
                         if resp.status_code == 200:
                             st.session_state.last_csv_url = csv_url
                             st.session_state.notif = "Data Google Sheet berhasil disinkronkan!"
                             st.rerun()
                         else:
-                            st.error(resp.json().get('error', resp.text))
-                else:
-                    st.warning("Masukkan URL terlebih dahulu")
+                            st.error(resp.json().get('error'))
 
     # ── Tab 3: Pencarian ──
     with tab3:
@@ -591,13 +467,11 @@ elif st.session_state.page == "admin_dashboard":
             semua_data = resp_data.json() if resp_data.status_code == 200 else []
         except:
             semua_data = []
-
         lokasi_list = sorted(set(d['lokasi'] for d in semua_data if d.get('lokasi')))
         kegiatan_list = sorted(set(d['kegiatan'] for d in semua_data if d.get('kegiatan')))
         penyerta_set = set()
         for d in semua_data:
-            for n in str(d.get('penyerta','')).split(','):
-                n = n.strip()
+            for n in parse_penyerta(d.get('penyerta','')):
                 if n: penyerta_set.add(n)
         penyerta_list = sorted(penyerta_set)
 
@@ -608,33 +482,32 @@ elif st.session_state.page == "admin_dashboard":
                 tgl_src = st.date_input("Tanggal", value=None, key="src_tgl")
             with col2:
                 lok_options = ["Semua"] + lokasi_list + ["Cari manual..."]
-                lok_dd = st.selectbox("Lokasi", lok_options, key="lok_dd")
+                lok_dd = st.selectbox("Lokasi", lok_options)
                 lok_src = ""
                 if lok_dd == "Cari manual...":
-                    lok_src = st.text_input("Ketik lokasi", key="lok_manual")
+                    lok_src = st.text_input("Ketik lokasi")
                 elif lok_dd != "Semua":
                     lok_src = lok_dd
             with col3:
                 keg_options = ["Semua"] + kegiatan_list + ["Cari manual..."]
-                keg_dd = st.selectbox("Nama Kegiatan", keg_options, key="keg_dd")
+                keg_dd = st.selectbox("Nama Kegiatan", keg_options)
                 keg_src = ""
                 if keg_dd == "Cari manual...":
-                    keg_src = st.text_input("Ketik nama kegiatan", key="keg_manual")
+                    keg_src = st.text_input("Ketik kegiatan")
                 elif keg_dd != "Semua":
                     keg_src = keg_dd
-
             peny_options = ["Semua"] + penyerta_list + ["Cari manual..."]
-            peny_dd = st.selectbox("Penyerta", peny_options, key="peny_dd")
+            peny_dd = st.selectbox("Penyerta", peny_options)
             peny_src = ""
             if peny_dd == "Cari manual...":
-                peny_src = st.text_input("Ketik nama penyerta", key="peny_manual")
+                peny_src = st.text_input("Ketik penyerta")
             elif peny_dd != "Semua":
                 peny_src = peny_dd
 
             if st.form_submit_button("Cari"):
                 params = {}
-                if tgl_src: params["tanggal"]  = str(tgl_src)
-                if lok_src: params["lokasi"]   = lok_src
+                if tgl_src: params["tanggal"] = str(tgl_src)
+                if lok_src: params["lokasi"] = lok_src
                 if keg_src: params["kegiatan"] = keg_src
                 if peny_src: params["penyerta"] = peny_src
                 if not params:
@@ -651,7 +524,10 @@ elif st.session_state.page == "admin_dashboard":
                                     groups[key].append(item['penyerta'])
                                 st.success(f"Ditemukan {len(groups)} grup data")
                                 for (tanggal, lokasi, kegiatan), list_penyerta in groups.items():
-                                    penyerta_gabung = '<br>'.join(p for p in list_penyerta if p)
+                                    all_names = []
+                                    for p_text in list_penyerta:
+                                        all_names.extend(parse_penyerta(p_text))
+                                    penyerta_gabung = '<br>'.join(all_names)
                                     st.markdown(f"""
                                     <div class="result-box">
                                         <b>{tanggal}</b> - {lokasi}<br>
@@ -666,7 +542,7 @@ elif st.session_state.page == "admin_dashboard":
                     except Exception as e:
                         st.error(f"Error: {e}")
 
-    # ── Tab 4: Kelola Data ──
+    # ── Tab 4: Kelola Data (hapus berdasarkan grup kegiatan) ──
     with tab4:
         st.subheader("Daftar Semua Kegiatan")
         try:
@@ -678,30 +554,33 @@ elif st.session_state.page == "admin_dashboard":
                     df_grouped = (
                         df_raw.groupby(['tanggal', 'lokasi', 'kegiatan'], sort=False)
                         .agg(
-                            id=('id', 'first'),
-                            penyerta=('penyerta', lambda x: ',\n'.join(x.tolist()))
+                            penyerta=('penyerta', lambda x: ';\n'.join(x.tolist())),
+                            # simpan daftar ID asli untuk keperluan hapus
+                            ids=('id', list)
                         )
                         .reset_index()
-                    )[['id', 'tanggal', 'lokasi', 'kegiatan', 'penyerta']]
-                    df_grouped.columns = ['ID', 'Tanggal', 'Lokasi', 'Kegiatan', 'Penyerta']
+                    )
+                    df_grouped.columns = ['Tanggal', 'Lokasi', 'Kegiatan', 'Penyerta', 'IDs']
 
-                    # Hapus massal menggunakan pending_delete_ids
+                    # Proses pending delete
                     if st.session_state.pending_delete_ids:
-                        with st.spinner("Menghapus data..."):
-                            resp_del = api_post("kegiatan/bulk-delete/",
-                                                {"ids": st.session_state.pending_delete_ids},
-                                                auth=True)
-                            if resp_del.status_code == 200:
-                                deleted_count = resp_del.json().get('message', '').split()[0]
-                                st.session_state.notif = f"{deleted_count} data berhasil dihapus!"
-                                st.session_state.pending_delete_ids = []
-                                st.rerun()
-                            else:
-                                st.error("Gagal menghapus data")
-                                st.session_state.pending_delete_ids = []
+                        # IDs ini adalah list of lists (karena tiap grup bisa punya beberapa id)
+                        flat_ids = []
+                        for id_list in st.session_state.pending_delete_ids:
+                            flat_ids.extend(id_list)
+                        if flat_ids:
+                            with st.spinner("Menghapus..."):
+                                resp_del = api_post("kegiatan/bulk-delete/", {"ids": flat_ids}, auth=True)
+                                if resp_del.status_code == 200:
+                                    st.session_state.notif = resp_del.json().get('message')
+                                    st.session_state.pending_delete_ids = []
+                                    st.rerun()
+                                else:
+                                    st.error("Gagal menghapus")
+                                    st.session_state.pending_delete_ids = []
 
                     event = st.dataframe(
-                        df_grouped,
+                        df_grouped[['Tanggal', 'Lokasi', 'Kegiatan', 'Penyerta']],
                         use_container_width=True,
                         hide_index=True,
                         on_select="rerun",
@@ -709,87 +588,72 @@ elif st.session_state.page == "admin_dashboard":
                         key="kelola_data"
                     )
                     selected_rows = event.selection.rows if event.selection else []
-                    valid_rows = []
-                    if selected_rows and len(df_grouped) > 0:
-                        max_idx = len(df_grouped) - 1
-                        valid_rows = [i for i in selected_rows if 0 <= i <= max_idx]
-
-                    selected_ids = [int(df_grouped.iloc[i]['ID']) for i in valid_rows] if valid_rows else []
-
-                    if selected_ids:
-                        st.markdown(f"**{len(selected_ids)} data terpilih**")
+                    valid_rows = [i for i in selected_rows if 0 <= i < len(df_grouped)]
+                    if valid_rows:
+                        selected_ids = [df_grouped.iloc[i]['IDs'] for i in valid_rows]
+                        st.markdown(f"**{len(selected_ids)} grup data terpilih**")
                         st.markdown('<div class="center-red-btn">', unsafe_allow_html=True)
                         if st.button("🗑️ Hapus Data Terpilih", use_container_width=False):
                             st.session_state.pending_delete_ids = selected_ids
                             st.rerun()
                         st.markdown('</div>', unsafe_allow_html=True)
 
-                    # Edit menggunakan dropdown
+                    # Edit via dropdown
                     st.markdown("---")
-                    st.markdown('<h4><i class="fa-solid fa-pen-to-square"></i> Edit Data</h4>',
-                                unsafe_allow_html=True)
+                    st.markdown('<h4><i class="fa-solid fa-pen-to-square"></i> Edit Data</h4>', unsafe_allow_html=True)
                     opsi_edit = ["—"] + [
-                        f"{row['ID']} | {row['Tanggal']} | {row['Lokasi']} | {row['Kegiatan']}"
+                        f"{row['Tanggal']} | {row['Lokasi']} | {row['Kegiatan']}"
                         for _, row in df_grouped.iterrows()
                     ]
-                    pilihan = st.selectbox("Pilih kegiatan yang akan diedit", opsi_edit)
+                    pilihan = st.selectbox("Pilih kegiatan", opsi_edit)
                     if pilihan != "—":
-                        edit_id = int(pilihan.split("|")[0].strip())
-                        if st.button("Muat Data"):
-                            resp_det = api_get(f"kegiatan/{edit_id}/", auth=True)
-                            if resp_det.status_code == 200:
-                                st.session_state.edit_data = resp_det.json()
-                            else:
-                                st.error("Data tidak ditemukan")
-                                st.session_state.edit_data = None
+                        tgl_pilih, lok_pilih, keg_pilih = pilihan.split(" | ")
+                        # Ambil salah satu ID dari grup untuk edit
+                        matched = df_grouped[(df_grouped['Tanggal'] == tgl_pilih) & (df_grouped['Lokasi'] == lok_pilih) & (df_grouped['Kegiatan'] == keg_pilih)]
+                        if not matched.empty:
+                            edit_id = matched.iloc[0]['IDs'][0]
+                            if st.button("Muat Data"):
+                                resp_det = api_get(f"kegiatan/{edit_id}/", auth=True)
+                                if resp_det.status_code == 200:
+                                    st.session_state.edit_data = resp_det.json()
+                                else:
+                                    st.error("ID tidak ditemukan")
                     if st.session_state.edit_data:
                         with st.form("edit_form"):
-                            tgl_ed  = st.date_input("Tanggal",
-                                                    value=pd.to_datetime(st.session_state.edit_data['tanggal']))
-                            lok_ed  = st.text_input("Lokasi",        value=st.session_state.edit_data['lokasi'])
-                            keg_ed  = st.text_input("Nama Kegiatan", value=st.session_state.edit_data['kegiatan'])
-                            peny_ed = st.text_area("Penyerta",       value=st.session_state.edit_data['penyerta'])
+                            tgl_ed = st.date_input("Tanggal", value=pd.to_datetime(st.session_state.edit_data['tanggal']))
+                            lok_ed = st.text_input("Lokasi", value=st.session_state.edit_data['lokasi'])
+                            keg_ed = st.text_input("Nama Kegiatan", value=st.session_state.edit_data['kegiatan'])
+                            peny_ed = st.text_area("Penyerta", value=st.session_state.edit_data['penyerta'])
                             if st.form_submit_button("Update"):
-                                try:
-                                    resp_upd = api_put(
-                                        f"kegiatan/{edit_id}/",
-                                        {"tanggal": str(tgl_ed), "lokasi": lok_ed,
-                                         "kegiatan": keg_ed, "penyerta": peny_ed,
-                                         "kategori": st.session_state.edit_data.get('kategori', 'luar_gedung')}
-                                    )
-                                    if resp_upd.status_code == 200:
-                                        st.session_state.notif = "Data berhasil diperbarui!"
-                                        st.session_state.edit_data = None
-                                        st.rerun()
-                                    else:
-                                        st.error(f"Gagal update: {resp_upd.text}")
-                                except Exception as e:
-                                    st.error(f"Error: {e}")
+                                resp_upd = api_put(f"kegiatan/{edit_id}/", {"tanggal": str(tgl_ed), "lokasi": lok_ed, "kegiatan": keg_ed, "penyerta": peny_ed, "kategori": st.session_state.edit_data.get('kategori','Luar Gedung')})
+                                if resp_upd.status_code == 200:
+                                    st.session_state.notif = "Data diperbarui!"
+                                    st.session_state.edit_data = None
+                                    st.rerun()
+                                else:
+                                    st.error(resp_upd.text)
 
                     # Hapus per bulan/tahun
                     st.markdown("---")
-                    st.markdown('<h4><i class="fa-solid fa-calendar-xmark"></i> Hapus per Bulan/Tahun</h4>',
-                                unsafe_allow_html=True)
-                    col_m, col_y, col_btn = st.columns([2, 2, 1])
+                    st.markdown('<h4><i class="fa-solid fa-calendar-xmark"></i> Hapus per Bulan/Tahun</h4>', unsafe_allow_html=True)
+                    col_m, col_y, col_btn = st.columns([2,2,1])
                     with col_m:
-                        bulan = st.selectbox("Bulan", range(1, 13), index=datetime.now().month - 1)
+                        bulan = st.selectbox("Bulan", range(1,13), index=datetime.now().month-1)
                     with col_y:
-                        tahun = st.number_input("Tahun", value=datetime.now().year, min_value=2000)
+                        tahun = st.number_input("Tahun", value=datetime.now().year)
                     with col_btn:
                         st.write("")
-                        if st.button("Hapus", key="hapus_bulan"):
-                            resp_del = api_post("delete-by-date/",
-                                                {"month": bulan, "year": tahun},
-                                                auth=True)
+                        if st.button("Hapus"):
+                            resp_del = api_post("delete-by-date/", {"month": bulan, "year": tahun}, auth=True)
                             if resp_del.status_code == 200:
-                                st.session_state.notif = resp_del.json().get('message')
+                                st.session_state.notif = resp_del.json()['message']
                                 st.rerun()
                             else:
-                                st.error("Gagal menghapus")
+                                st.error("Gagal")
                 else:
                     st.info("Belum ada data")
             else:
-                st.error("Gagal memuat data.")
+                st.error("Gagal memuat data")
         except Exception as e:
             st.error(f"Error: {e}")
 
@@ -804,22 +668,20 @@ elif st.session_state.page == "admin_dashboard":
                     today = date.today()
                     df = pd.DataFrame(data)
                     df['tanggal_date'] = pd.to_datetime(df['tanggal']).dt.date
-                    df = df.sort_values(by='tanggal_date')
-
+                    df = df.sort_values('tanggal_date')
                     for _, row in df.iterrows():
                         tgl_date = row['tanggal_date']
                         if tgl_date < today:
-                            status_class = "past"
+                            cls = "past"
                         elif tgl_date == today:
-                            status_class = "today"
+                            cls = "today"
                         elif tgl_date == today + timedelta(days=1):
-                            status_class = "tomorrow"
+                            cls = "tomorrow"
                         else:
-                            status_class = "future"
-
+                            cls = "future"
                         hari = tgl_date.strftime('%A, %d %B %Y')
                         st.markdown(f"""
-                        <div class="result-box {status_class}">
+                        <div class="result-box {cls}">
                             <b>{hari}</b><br>
                             {row['lokasi']} - {row['kegiatan']} ({row.get('kategori','luar_gedung')})<br>
                             <small>{row['penyerta']}</small>
@@ -827,19 +689,14 @@ elif st.session_state.page == "admin_dashboard":
                         """, unsafe_allow_html=True)
                 else:
                     st.info("Belum ada data")
-            else:
-                st.error("Gagal memuat data")
         except Exception as e:
             st.error(f"Error: {e}")
 
     # ── Tab 6: Randomize ──
     with tab6:
         st.subheader("Randomize Kegiatan Dalam Gedung")
-        st.info("Fitur ini akan datang.")
-        with st.form("randomize_form"):
-            st.text_input("Kriteria (nanti diisi)")
-            st.form_submit_button("Acak (segera)")
+        st.info("Fitur akan datang.")
 
-# ─── Footer ───────────────────────────────────────────────────────────────────
+# ─── Footer ───
 st.markdown("---")
 st.markdown("<div style='text-align:center'>Puskesmas Sangkali &copy; 2026</div>", unsafe_allow_html=True)
