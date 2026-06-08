@@ -13,5 +13,6 @@ urlpatterns = [
     path('search-admin/', views.search_admin),
     path('search-user/', views.search_user),
     path('jadwal-terdekat/', views.jadwal_terdekat),
-    path('verify-token/', views.verify_token),   # <-- penting
+    path('verify-token/', views.verify_token),
+       path('delete-by-date/', views.delete_kegiatan_by_date),
 ]

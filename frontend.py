@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from collections import defaultdict
 
 # ---------- Konfigurasi Halaman ----------
@@ -56,21 +56,98 @@ st.html("""
     vertical-align: middle;
     margin-right: 6px;
   }
+  .past { color: #9ca3af; }
+  .today { color: #15803d; font-weight: bold; }
+  .tomorrow { color: #2563eb; }
+  .future { color: #111827; }
+  .reduced-link { color: #6b7280; font-style: italic; font-size: 0.9rem; }
+  .notification-card {
+    background: #dcfce7;
+    border: 1px solid #bbf7d0;
+    padding: 1rem;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+  }
+  .notification-card ul {
+    margin-top: 0.5rem;
+    padding-left: 1.5rem;
+  }
+  .notification-card li {
+    margin-bottom: 0.25rem;
+  }
+  .center-red-btn {
+    display: flex;
+    justify-content: center;
+    margin: 1rem 0;
+  }
+  .center-red-btn button {
+    background-color: #dc2626 !important;
+    color: white !important;
+    border: none !important;
+    font-weight: 500;
+    padding: 0.4rem 1.5rem !important;
+    border-radius: 8px;
+    width: auto !important;
+  }
+  .center-red-btn button:hover {
+    background-color: #b91c1c !important;
+  }
 </style>
 """)
 
 # ---------- Konstanta ----------
 API_BASE = "http://localhost:8000/api"
 
+# Daftar pegawai Puskesmas Sangkali
 DAFTAR_NAMA = [
-    "Ahmad Fauzi", "Anisa Rahma", "Budi Santoso", "Citra Dewi", "Dedi Kurniawan",
-    "Eka Fitriani", "Fajar Pratama", "Gita Puspita", "Hendra Gunawan", "Indah Lestari",
-    "Joko Susilo", "Kartika Sari", "Lukman Hakim", "Maya Sari", "Nanda Putra",
-    "Oktavia Dewi", "Prabowo Subroto", "Qonita Zahra", "Rizki Amelia", "Siti Nurjanah",
-    "Teguh Prasetyo", "Umi Kalsum", "Vina Oktaviani", "Wahyu Setiawan", "Xena Aulia",
-    "Yusuf Maulana", "Zahra Firdaus", "Agus Salim", "Dewi Sartika", "Eko Prasetyo",
-    "Fatimah Azzahra", "Gilang Ramadhan", "Hani Nurfadillah", "Ikhsan Pratama", "Jihan Nabila",
-    "Khairul Anwar", "Laila Nuraini", "Miftahul Jannah", "Nadya Puspita", "Oscar Fernando"
+    "Isep Deni Herdian, S.Kep.,MMRS",
+    "Isep Suhendar,SKM",
+    "Bdn. Yeni Yulyani Setianingsih, S.ST",
+    "Bdn. Nina Ainun, S.Tr.Keb",
+    "Rita Sahara, S.Tr.Keb",
+    "Dewi Sri Mulyani, Am.Keb",
+    "Pipit Puspitasari, Am.Keb",
+    "Mira Jatnikawati, Am.Keb",
+    "Reni Mustikasari, Am.Keb",
+    "Alitsa Nuur Fithri, S.ST",
+    "Yesi Apriyani, Am.Keb",
+    "Asri Awulan, S.Tr.Keb",
+    "Pia Nur Podiana, A.Md.Keb",
+    "Intang Sri Purnama, AM.Keb",
+    "Ucu Lestari, AM.Keb",
+    "Annisa Nafaulloh,S.Tr.Keb.,Bdn",
+    "Mutia Wulansari.,S.Kep.,Ners",
+    "Ujang Effendi, S.Kep.,Ners",
+    "Liska Permatasari, S.Kep.,Ners",
+    "Dede Khaerul Kamal Muchtar, AMK",
+    "Iman Nurul Haq, A.Md.Kep",
+    "Wida Idul Adha, S.Kep.,Ners",
+    "Oriany Kemala Dewi, Amd.Kep",
+    "Haeriah, A.Md.Kep",
+    "Dede Aan Septiantini, A.Md.Kep",
+    "dr.Ferry Nalapraya",
+    "dr.Muhammad Azhary Romdhon",
+    "dr.Iwan Setiawan",
+    "dr. Siti Hana Fukui",
+    "dr. Volti Diana Suryawadi",
+    "drg.Rifan Hanggoro.M.M.R.S",
+    "Endah Setiawati,S.Tr.Kes",
+    "Khilman Husna Pratama, S.Farm.,Apt",
+    "Vita Tyana Virista, A.Md.AK",
+    "Gina Giovany, A.Md.AK",
+    "Eko Wahyu Saputro, S.K.M",
+    "Nurul Hasanah, A.Md.KL",
+    "Nova Silpiany Perdany, A.Md.Farm",
+    "Ameilia Putri Isyari, S.Gz",
+    "Annisa Fauziah, A.Md.Gz",
+    "Rudi Sutikno, SKM",
+    "Yogi Aris Diyanto, S.E",
+    "Rangga Ismardana Gasbela,S.T",
+    "Winda Siti Sarah, AMd.RMIK",
+    "Pupung Juliana",
+    "Salsa Sabila",
+    "Andina Dea Priatna, SKM",
+    "Iip Supyan"
 ]
 
 # ---------- Session State ----------
@@ -80,6 +157,9 @@ for key, default in [
     ('username', ''),
     ('page', 'user'),
     ('edit_data', None),
+    ('last_csv_url', ''),
+    ('notif', None),                # untuk menampung notifikasi sukses
+    ('pending_delete_ids', []),     # menyimpan ID yang akan dihapus (massal)
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -126,6 +206,7 @@ def api_delete(path):
     return requests.delete(f"{API_BASE}/{path}", headers=auth_headers(), timeout=10)
 
 def get_nama_dari_data():
+    """Ambil nama-nama penyerta dari data kegiatan yang sudah ada."""
     try:
         r = requests.get(f"{API_BASE}/search-user/", timeout=5)
         semua = r.json() if r.status_code == 200 else []
@@ -137,6 +218,11 @@ def get_nama_dari_data():
             n = n.strip()
             if n: nama_set.add(n)
     return sorted(nama_set)
+
+# ---------- Tampilkan notif yang tersimpan (jika ada) ----------
+if st.session_state.notif:
+    st.toast(st.session_state.notif, icon="✅")
+    st.session_state.notif = None
 
 # ---------- Header ----------
 st.markdown("""
@@ -194,6 +280,38 @@ with st.sidebar:
 
 # ========================== HALAMAN USER ==========================
 if st.session_state.page == "user":
+    # --- Notifikasi Kegiatan Hari ini & Besok ---
+    try:
+        today = date.today()
+        tomorrow = today + timedelta(days=1)
+        resp_notif = requests.get(f"{API_BASE}/jadwal-terdekat/", timeout=3)
+        if resp_notif.status_code == 200:
+            jadwal = resp_notif.json()
+            notif_hari_ini = [j for j in jadwal if j['tanggal'] == str(today)]
+            notif_besok = [j for j in jadwal if j['tanggal'] == str(tomorrow)]
+
+            if notif_hari_ini:
+                items = ''.join(f"<li>{j['kegiatan']} di {j['lokasi']}</li>" for j in notif_hari_ini)
+                st.markdown(f"""
+                <div class="notification-card">
+                    <i class="fa-solid fa-circle-exclamation"></i>
+                    <b>Hari ini ada kegiatan:</b>
+                    <ul>{items}</ul>
+                </div>
+                """, unsafe_allow_html=True)
+
+            if notif_besok:
+                items = ''.join(f"<li>{j['kegiatan']} di {j['lokasi']}</li>" for j in notif_besok)
+                st.markdown(f"""
+                <div class="notification-card" style="background:#eff6ff; border-color:#bfdbfe;">
+                    <i class="fa-solid fa-calendar-check"></i>
+                    <b>Besok (H-1):</b>
+                    <ul>{items}</ul>
+                </div>
+                """, unsafe_allow_html=True)
+    except:
+        pass
+
     st.markdown("""
     <div class="icon-text" style="margin-bottom:0.5rem">
       <svg class="svg-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#14532d" stroke-width="2"
@@ -206,9 +324,11 @@ if st.session_state.page == "user":
 
     col1, col2 = st.columns([2, 1])
     with col1:
+        # Gabung nama dari data real + daftar pegawai baru, tanpa duplikasi
         nama_dari_data = get_nama_dari_data()
         nama_gabungan = nama_dari_data + [n for n in DAFTAR_NAMA if n not in set(nama_dari_data)]
-        if not nama_gabungan: nama_gabungan = DAFTAR_NAMA
+        if not nama_gabungan:
+            nama_gabungan = DAFTAR_NAMA  # fallback jika tidak ada data real
 
         with st.form("user_form"):
             nama    = st.selectbox("Nama Lengkap", nama_gabungan)
@@ -368,8 +488,9 @@ elif st.session_state.page == "admin_dashboard":
     """, unsafe_allow_html=True)
     st.success(f"Selamat datang, {st.session_state.username}")
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "Input Manual", "Google Sheet", "Pencarian", "Kelola Data", "Randomize (Dalam Gedung)"
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "Input Manual", "Google Sheet", "Pencarian", "Kelola Data",
+        "History", "Randomize (Dalam Gedung)"
     ])
 
     # ── Tab 1: Input Manual ──
@@ -394,37 +515,76 @@ elif st.session_state.page == "admin_dashboard":
                             auth=True
                         )
                         if resp.status_code == 201:
-                            st.success("Data berhasil disimpan!")
+                            st.session_state.notif = "Data berhasil disimpan!"
                             st.rerun()
                         else:
                             st.error(f"Gagal menyimpan: {resp.text}")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
-    # ── Tab 2: Google Sheet ──
+    # ── Tab 2: Google Sheet (dengan link tersimpan) ──
     with tab2:
         st.markdown('<h4><i class="fa-solid fa-cloud-arrow-up"></i> Sync dari Google Spreadsheet</h4>',
                     unsafe_allow_html=True)
         st.caption("File > Share > Publish to web > CSV > Copy link")
         st.info("Kolom yang diperlukan: `tanggal`, `lokasi`, `kegiatan`, `penyerta`")
-        csv_url = st.text_input("Link CSV terpublikasi", key="csv_url")
-        if st.button("Ambil & Simpan Data"):
-            if not csv_url.strip():
-                st.warning("Masukkan URL terlebih dahulu")
-            else:
-                with st.spinner("Mengambil data..."):
-                    try:
-                        resp = api_post("sync-sheets/", {"csv_url": csv_url}, auth=True)
+
+        if st.session_state.last_csv_url:
+            st.markdown(f"<p class='reduced-link'>Link tersimpan: {st.session_state.last_csv_url}</p>",
+                        unsafe_allow_html=True)
+            col_upd, col_del = st.columns(2)
+            with col_upd:
+                if st.button("Update Link", use_container_width=True):
+                    st.session_state.show_csv_input = True
+            with col_del:
+                if st.button("Hapus Link", use_container_width=True):
+                    st.session_state.last_csv_url = ""
+                    st.rerun()
+
+            show_input = st.session_state.get('show_csv_input', False)
+            if show_input:
+                csv_url = st.text_input("Link CSV terpublikasi (baru)", key="csv_url_new")
+                sync_mode = st.radio("Mode sinkronisasi",
+                                     ['append', 'replace'],
+                                     format_func=lambda x: "Tambahkan saja (jaga data lama)" if x == 'append' else "Ganti semua data",
+                                     horizontal=True)
+                if st.button("Simpan & Sync", key="btn_update"):
+                    if csv_url:
+                        with st.spinner("Menyinkronkan..."):
+                            resp = api_post("sync-sheets/",
+                                            {"csv_url": csv_url, "mode": sync_mode},
+                                            auth=True)
+                            if resp.status_code == 200:
+                                st.session_state.last_csv_url = csv_url
+                                st.session_state.show_csv_input = False
+                                st.session_state.notif = "Data Google Sheet berhasil disinkronkan!"
+                                st.rerun()
+                            else:
+                                st.error(resp.json().get('error', 'Gagal'))
+                    else:
+                        st.warning("Masukkan URL")
+        else:
+            csv_url = st.text_input("Link CSV terpublikasi", key="csv_url_blank")
+            sync_mode = st.radio("Mode sinkronisasi",
+                                 ['append', 'replace'],
+                                 format_func=lambda x: "Tambahkan saja (jaga data lama)" if x == 'append' else "Ganti semua data",
+                                 horizontal=True)
+            if st.button("Ambil & Simpan Data"):
+                if csv_url:
+                    with st.spinner("Mengambil data..."):
+                        resp = api_post("sync-sheets/",
+                                        {"csv_url": csv_url, "mode": sync_mode},
+                                        auth=True)
                         if resp.status_code == 200:
-                            result = resp.json()
-                            st.success(result.get('message', 'Data berhasil diimpor.'))
+                            st.session_state.last_csv_url = csv_url
+                            st.session_state.notif = "Data Google Sheet berhasil disinkronkan!"
                             st.rerun()
                         else:
                             st.error(resp.json().get('error', resp.text))
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+                else:
+                    st.warning("Masukkan URL terlebih dahulu")
 
-    # ── Tab 3: Pencarian (dengan dropdown + input manual untuk Lokasi) ──
+    # ── Tab 3: Pencarian ──
     with tab3:
         try:
             resp_data = api_get("kegiatan/", auth=True)
@@ -432,7 +592,6 @@ elif st.session_state.page == "admin_dashboard":
         except:
             semua_data = []
 
-        # Ambil daftar unik lokasi, kegiatan, penyerta
         lokasi_list = sorted(set(d['lokasi'] for d in semua_data if d.get('lokasi')))
         kegiatan_list = sorted(set(d['kegiatan'] for d in semua_data if d.get('kegiatan')))
         penyerta_set = set()
@@ -448,7 +607,6 @@ elif st.session_state.page == "admin_dashboard":
             with col1:
                 tgl_src = st.date_input("Tanggal", value=None, key="src_tgl")
             with col2:
-                # LOKASI: dropdown + input manual
                 lok_options = ["Semua"] + lokasi_list + ["Cari manual..."]
                 lok_dd = st.selectbox("Lokasi", lok_options, key="lok_dd")
                 lok_src = ""
@@ -457,7 +615,6 @@ elif st.session_state.page == "admin_dashboard":
                 elif lok_dd != "Semua":
                     lok_src = lok_dd
             with col3:
-                # KEGIATAN: dropdown + input manual
                 keg_options = ["Semua"] + kegiatan_list + ["Cari manual..."]
                 keg_dd = st.selectbox("Nama Kegiatan", keg_options, key="keg_dd")
                 keg_src = ""
@@ -466,7 +623,6 @@ elif st.session_state.page == "admin_dashboard":
                 elif keg_dd != "Semua":
                     keg_src = keg_dd
 
-            # PENYERTA: dropdown + input manual
             peny_options = ["Semua"] + penyerta_list + ["Cari manual..."]
             peny_dd = st.selectbox("Penyerta", peny_options, key="peny_dd")
             peny_src = ""
@@ -489,14 +645,12 @@ elif st.session_state.page == "admin_dashboard":
                         if resp.status_code == 200:
                             hasil = resp.json()
                             if hasil:
-                                # === GROUPING: gabung penyerta per (tanggal, lokasi, kegiatan) ===
                                 groups = defaultdict(list)
                                 for item in hasil:
                                     key = (item['tanggal'], item['lokasi'], item['kegiatan'])
                                     groups[key].append(item['penyerta'])
                                 st.success(f"Ditemukan {len(groups)} grup data")
                                 for (tanggal, lokasi, kegiatan), list_penyerta in groups.items():
-                                    # Gabung penyerta dengan <br> agar tampil ke bawah
                                     penyerta_gabung = '<br>'.join(p for p in list_penyerta if p)
                                     st.markdown(f"""
                                     <div class="result-box">
@@ -521,7 +675,6 @@ elif st.session_state.page == "admin_dashboard":
                 data = resp.json()
                 if data:
                     df_raw = pd.DataFrame(data)
-                    # Gabung penyerta dengan koma + newline untuk tampilan di dataframe
                     df_grouped = (
                         df_raw.groupby(['tanggal', 'lokasi', 'kegiatan'], sort=False)
                         .agg(
@@ -531,30 +684,64 @@ elif st.session_state.page == "admin_dashboard":
                         .reset_index()
                     )[['id', 'tanggal', 'lokasi', 'kegiatan', 'penyerta']]
                     df_grouped.columns = ['ID', 'Tanggal', 'Lokasi', 'Kegiatan', 'Penyerta']
-                    st.dataframe(
+
+                    # Hapus massal menggunakan pending_delete_ids
+                    if st.session_state.pending_delete_ids:
+                        with st.spinner("Menghapus data..."):
+                            resp_del = api_post("kegiatan/bulk-delete/",
+                                                {"ids": st.session_state.pending_delete_ids},
+                                                auth=True)
+                            if resp_del.status_code == 200:
+                                deleted_count = resp_del.json().get('message', '').split()[0]
+                                st.session_state.notif = f"{deleted_count} data berhasil dihapus!"
+                                st.session_state.pending_delete_ids = []
+                                st.rerun()
+                            else:
+                                st.error("Gagal menghapus data")
+                                st.session_state.pending_delete_ids = []
+
+                    event = st.dataframe(
                         df_grouped,
                         use_container_width=True,
                         hide_index=True,
-                        column_config={
-                            "Penyerta": st.column_config.TextColumn(width="large")
-                        }
+                        on_select="rerun",
+                        selection_mode="multi-row",
+                        key="kelola_data"
                     )
+                    selected_rows = event.selection.rows if event.selection else []
+                    valid_rows = []
+                    if selected_rows and len(df_grouped) > 0:
+                        max_idx = len(df_grouped) - 1
+                        valid_rows = [i for i in selected_rows if 0 <= i <= max_idx]
 
-                    # Edit
+                    selected_ids = [int(df_grouped.iloc[i]['ID']) for i in valid_rows] if valid_rows else []
+
+                    if selected_ids:
+                        st.markdown(f"**{len(selected_ids)} data terpilih**")
+                        st.markdown('<div class="center-red-btn">', unsafe_allow_html=True)
+                        if st.button("🗑️ Hapus Data Terpilih", use_container_width=False):
+                            st.session_state.pending_delete_ids = selected_ids
+                            st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
+
+                    # Edit menggunakan dropdown
                     st.markdown("---")
                     st.markdown('<h4><i class="fa-solid fa-pen-to-square"></i> Edit Data</h4>',
                                 unsafe_allow_html=True)
-                    edit_id = st.number_input("ID data yang akan diedit", min_value=1, step=1)
-                    if st.button("Ambil Data"):
-                        try:
+                    opsi_edit = ["—"] + [
+                        f"{row['ID']} | {row['Tanggal']} | {row['Lokasi']} | {row['Kegiatan']}"
+                        for _, row in df_grouped.iterrows()
+                    ]
+                    pilihan = st.selectbox("Pilih kegiatan yang akan diedit", opsi_edit)
+                    if pilihan != "—":
+                        edit_id = int(pilihan.split("|")[0].strip())
+                        if st.button("Muat Data"):
                             resp_det = api_get(f"kegiatan/{edit_id}/", auth=True)
                             if resp_det.status_code == 200:
                                 st.session_state.edit_data = resp_det.json()
                             else:
-                                st.error("ID tidak ditemukan")
+                                st.error("Data tidak ditemukan")
                                 st.session_state.edit_data = None
-                        except Exception as e:
-                            st.error(f"Error: {e}")
                     if st.session_state.edit_data:
                         with st.form("edit_form"):
                             tgl_ed  = st.date_input("Tanggal",
@@ -567,10 +754,11 @@ elif st.session_state.page == "admin_dashboard":
                                     resp_upd = api_put(
                                         f"kegiatan/{edit_id}/",
                                         {"tanggal": str(tgl_ed), "lokasi": lok_ed,
-                                         "kegiatan": keg_ed, "penyerta": peny_ed}
+                                         "kegiatan": keg_ed, "penyerta": peny_ed,
+                                         "kategori": st.session_state.edit_data.get('kategori', 'luar_gedung')}
                                     )
                                     if resp_upd.status_code == 200:
-                                        st.success("Data diperbarui.")
+                                        st.session_state.notif = "Data berhasil diperbarui!"
                                         st.session_state.edit_data = None
                                         st.rerun()
                                     else:
@@ -578,20 +766,26 @@ elif st.session_state.page == "admin_dashboard":
                                 except Exception as e:
                                     st.error(f"Error: {e}")
 
-                    # Hapus
-                    st.markdown('<h4><i class="fa-solid fa-trash-can"></i> Hapus Data</h4>',
+                    # Hapus per bulan/tahun
+                    st.markdown("---")
+                    st.markdown('<h4><i class="fa-solid fa-calendar-xmark"></i> Hapus per Bulan/Tahun</h4>',
                                 unsafe_allow_html=True)
-                    del_id = st.number_input("ID data yang akan dihapus", min_value=1, step=1, key="del_id")
-                    if st.button("Hapus"):
-                        try:
-                            resp_del = api_delete(f"kegiatan/{del_id}/")
-                            if resp_del.status_code == 204:
-                                st.success("Data dihapus.")
+                    col_m, col_y, col_btn = st.columns([2, 2, 1])
+                    with col_m:
+                        bulan = st.selectbox("Bulan", range(1, 13), index=datetime.now().month - 1)
+                    with col_y:
+                        tahun = st.number_input("Tahun", value=datetime.now().year, min_value=2000)
+                    with col_btn:
+                        st.write("")
+                        if st.button("Hapus", key="hapus_bulan"):
+                            resp_del = api_post("delete-by-date/",
+                                                {"month": bulan, "year": tahun},
+                                                auth=True)
+                            if resp_del.status_code == 200:
+                                st.session_state.notif = resp_del.json().get('message')
                                 st.rerun()
                             else:
-                                st.error(f"Gagal menghapus: {resp_del.text}")
-                        except Exception as e:
-                            st.error(f"Error: {e}")
+                                st.error("Gagal menghapus")
                 else:
                     st.info("Belum ada data")
             else:
@@ -599,8 +793,47 @@ elif st.session_state.page == "admin_dashboard":
         except Exception as e:
             st.error(f"Error: {e}")
 
-    # ── Tab 5: Randomize ──
+    # ── Tab 5: History ──
     with tab5:
+        st.subheader("History Kegiatan")
+        try:
+            resp = api_get("kegiatan/", auth=True)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data:
+                    today = date.today()
+                    df = pd.DataFrame(data)
+                    df['tanggal_date'] = pd.to_datetime(df['tanggal']).dt.date
+                    df = df.sort_values(by='tanggal_date')
+
+                    for _, row in df.iterrows():
+                        tgl_date = row['tanggal_date']
+                        if tgl_date < today:
+                            status_class = "past"
+                        elif tgl_date == today:
+                            status_class = "today"
+                        elif tgl_date == today + timedelta(days=1):
+                            status_class = "tomorrow"
+                        else:
+                            status_class = "future"
+
+                        hari = tgl_date.strftime('%A, %d %B %Y')
+                        st.markdown(f"""
+                        <div class="result-box {status_class}">
+                            <b>{hari}</b><br>
+                            {row['lokasi']} - {row['kegiatan']} ({row.get('kategori','luar_gedung')})<br>
+                            <small>{row['penyerta']}</small>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("Belum ada data")
+            else:
+                st.error("Gagal memuat data")
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+    # ── Tab 6: Randomize ──
+    with tab6:
         st.subheader("Randomize Kegiatan Dalam Gedung")
         st.info("Fitur ini akan datang.")
         with st.form("randomize_form"):
