@@ -6,4 +6,6 @@ pandas
 requests
 gspread
 oauth2client
-openpyxl                       # baca excel jika perlu
+openpyxl             
+fpdf
+reportlab
