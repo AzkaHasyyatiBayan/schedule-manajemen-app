@@ -9,3 +9,6 @@ oauth2client
 openpyxl             
 fpdf
 reportlab
+psycopg2-binary 
+dj-database-url 
+gunicorn

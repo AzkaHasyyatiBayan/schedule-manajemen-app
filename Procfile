@@ -1,0 +1,1 @@
+web: gunicorn puskesmas.wsgi --log-file -
