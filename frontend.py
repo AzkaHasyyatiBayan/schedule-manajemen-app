@@ -555,7 +555,7 @@ if st.session_state.page=="user":
                 else:
                     # Header receipt
                     st.markdown(f"""
-                    <div class="receipt-box">
+                    <div class="receipt-box" style="margin-bottom:0;border-radius:4px 4px 0 0;">
                         <div class="receipt-header">
                             <h3>Riwayat Kehadiran</h3>
                             <p>{nama_riwayat}</p>
@@ -582,78 +582,80 @@ if st.session_state.page=="user":
                         else:
                             badge_html = '<span class="history-badge-netral">Belum Ditandai</span>'
 
-                        # Penyerta
+                        # Penyerta — satu baris per nama
                         peny_list = parse_penyerta(str(row["penyerta"]))
                         peny_html = "".join(
                             f'<span style="display:block;margin-bottom:0.1rem;">{p}</span>'
                             for p in peny_list
                         ) if peny_list else f'<span>{str(row["penyerta"])}</span>'
 
-                        # Border bawah kecuali item terakhir
-                        border_style = "border-bottom:1px dashed #ddd8cc;" if not is_last else ""
+                        border_bottom = "border-bottom:1px dashed #ddd8cc;" if not is_last else ""
 
-                        # Render item receipt (info saja, tanpa tombol)
-                        st.markdown(f"""
-                        <div class="receipt-box" style="margin:0;border-radius:0;box-shadow:none;
-                             border-top:none;border-left:1px solid #e2e0d8;border-right:1px solid #e2e0d8;
-                             border-bottom:{'1px solid #e2e0d8' if is_last else 'none'};">
-                            <div class="receipt-body" style="padding:0.6rem 1.25rem;">
-                                <div style="{border_style}padding-bottom:{'0.6rem' if not is_last else '0'};">
-                                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                                        <div style="flex:1;min-width:0;">
-                                            <div class="receipt-item-title" style="margin-bottom:0.3rem;">
-                                                {row['kegiatan']}
-                                            </div>
-                                            <div class="receipt-item-row">
-                                                <span class="receipt-item-label">Tanggal</span>
-                                                <span class="receipt-item-value">{tgl_fmt}</span>
-                                            </div>
-                                            <div class="receipt-item-row">
-                                                <span class="receipt-item-label">Lokasi</span>
-                                                <span class="receipt-item-value">{row['lokasi']}</span>
-                                            </div>
-                                            <div class="receipt-item-row" style="align-items:flex-start;">
-                                                <span class="receipt-item-label">Penyerta</span>
-                                                <div class="receipt-item-value">{peny_html}</div>
-                                            </div>
-                                            <div style="margin-top:0.35rem;">{badge_html}</div>
-                                        </div>
-                                        {'<div style="flex-shrink:0;width:80px;"></div>' if sudah_lewat else ''}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                        # Tombol Streamlit native di kolom kanan — hanya untuk kegiatan lewat/hari ini
+                        # Kolom: receipt info (kiri) | tombol (kanan, hanya jika sudah lewat)
                         if sudah_lewat:
-                            # Buat layout: konten kiri + tombol kanan sejajar dengan item di atas
-                            # Gunakan negative margin trick agar tombol "menempel" ke item receipt
-                            _, col_btn = st.columns([3, 1])
+                            col_info, col_btn = st.columns([4, 1])
+                        else:
+                            col_info = st.columns(1)[0]
+                            col_btn = None
+
+                        with col_info:
+                            st.markdown(f"""
+                            <div style="background:#fffef8;
+                                        border-left:1px solid #e2e0d8;
+                                        border-right:{'none' if sudah_lewat else '1px solid #e2e0d8'};
+                                        padding:0.75rem 1.25rem;
+                                        {border_bottom}">
+                                <div class="receipt-item-title" style="margin-bottom:0.3rem;">{row['kegiatan']}</div>
+                                <div class="receipt-item-row">
+                                    <span class="receipt-item-label">Tanggal</span>
+                                    <span class="receipt-item-value">{tgl_fmt}</span>
+                                </div>
+                                <div class="receipt-item-row">
+                                    <span class="receipt-item-label">Lokasi</span>
+                                    <span class="receipt-item-value">{row['lokasi']}</span>
+                                </div>
+                                <div class="receipt-item-row" style="align-items:flex-start;">
+                                    <span class="receipt-item-label">Penyerta</span>
+                                    <div class="receipt-item-value">{peny_html}</div>
+                                </div>
+                                <div style="margin-top:0.35rem;">{badge_html}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                        if col_btn is not None:
                             with col_btn:
-                                btn_container = st.container()
-                                with btn_container:
-                                    if st.button(
-                                        "✓ Hadir",
-                                        key=f"hadir_{unique_key}_{idx}",
-                                        use_container_width=True,
-                                        type="primary" if status != "hadir" else "secondary",
-                                    ):
-                                        st.session_state.user_history_status[unique_key] = "hadir"
-                                        st.rerun()
-                                    if st.button(
-                                        "✗ Tidak",
-                                        key=f"tidak_{unique_key}_{idx}",
-                                        use_container_width=True,
-                                    ):
-                                        st.session_state.user_history_status[unique_key] = "tidak_hadir"
-                                        st.rerun()
+                                st.markdown(f"""
+                                <div style="background:#fffef8;
+                                            border-right:1px solid #e2e0d8;
+                                            padding:0.75rem 0.5rem;
+                                            height:100%;
+                                            display:flex;
+                                            flex-direction:column;
+                                            justify-content:center;
+                                            gap:6px;
+                                            {border_bottom}">
+                                </div>
+                                """, unsafe_allow_html=True)
+                                if st.button(
+                                    "✓ Hadir",
+                                    key=f"hadir_{unique_key}_{idx}",
+                                    use_container_width=True,
+                                    type="primary" if status != "hadir" else "secondary",
+                                ):
+                                    st.session_state.user_history_status[unique_key] = "hadir"
+                                    st.rerun()
+                                if st.button(
+                                    "✗ Tidak",
+                                    key=f"tidak_{unique_key}_{idx}",
+                                    use_container_width=True,
+                                ):
+                                    st.session_state.user_history_status[unique_key] = "tidak_hadir"
+                                    st.rerun()
 
                     # Footer receipt
                     st.markdown(f"""
-                    <div class="receipt-box" style="margin:0;border-radius:0 0 4px 4px;box-shadow:none;
-                         border-top:none;border-left:1px solid #e2e0d8;border-right:1px solid #e2e0d8;
-                         border-bottom:1px solid #e2e0d8;">
+                    <div class="receipt-box" style="margin-top:0;border-radius:0 0 4px 4px;
+                         border-top:none;box-shadow:none;">
                         <div class="receipt-footer">
                             <div class="receipt-barcode">|||||||||||||||||||||||</div>
                             {len(df_filtered)} kegiatan
