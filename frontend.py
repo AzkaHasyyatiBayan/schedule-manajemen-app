@@ -510,23 +510,24 @@ if st.session_state.page=="user":
     with col2:
         st.markdown('<div class="data-card"><div style="display:flex;align-items:center;gap:6px;margin-bottom:0.5rem"><i class="fa-solid fa-circle-info" style="color:#14532d;"></i><span style="font-weight:700;color:#14532d;">Informasi</span></div><ul style="font-size:0.88rem;line-height:1.8;"><li>Datang 15 menit lebih awal</li><li>Bawa KMS/BPJS</li><li>Gunakan masker</li></ul></div>', unsafe_allow_html=True)
 
-    # Riwayat Kehadiran
+        # ── Riwayat Kehadiran (receipt style) ──
     st.markdown("---")
     st.markdown('<div style="display:flex;align-items:center;gap:8px;margin-bottom:0.5rem"><i class="fa-solid fa-clock-rotate-left" style="color:#14532d;"></i><span style="font-size:1.2rem;font-weight:700;color:#14532d;">Riwayat Kehadiran Saya</span></div>', unsafe_allow_html=True)
     cf1,cf2,cf3=st.columns([2,2,1])
     with cf1: nama_riwayat=st.selectbox("Nama", DAFTAR_NAMA, key="nama_riwayat")
     with cf2: bulan_riwayat=st.selectbox("Bulan", ["Semua"]+list(calendar.month_name)[1:], key="bulan_riwayat")
     with cf3: tahun_riwayat=st.number_input("Tahun", value=datetime.now().year, min_value=2020, max_value=2030)
- 
+
     if st.button("Tampilkan Riwayat"):
         try:
+            # Gunakan endpoint search-user (publik)
             resp = api_get("search-user/", params={"nama": nama_riwayat})
             raw_data = None
             if resp.status_code == 200:
                 raw_data = resp.json()
             else:
-                # fallback ke kegiatan/
-                for use_auth in ([True, False] if st.session_state.logged_in else [False]):
+                # fallback ke kegiatan/ (filter manual)
+                for use_auth in ([True,False] if st.session_state.logged_in else [False]):
                     try:
                         r2 = api_get("kegiatan/", auth=use_auth)
                         if r2.status_code == 200:
@@ -535,7 +536,7 @@ if st.session_state.page=="user":
                             raw_data = [d for d in all_d if kw.lower() in d.get("penyerta","").lower()]
                             break
                     except: continue
- 
+
             if not raw_data:
                 st.info("Belum ada data kegiatan di sistem.")
             else:
@@ -546,89 +547,79 @@ if st.session_state.page=="user":
                     bulan_num = list(calendar.month_name).index(bulan_riwayat)
                     df_filtered = df_filtered[df_filtered["tanggal_dt"].dt.month == bulan_num]
                 df_filtered = df_filtered.sort_values("tanggal_dt", ascending=False)
- 
+
                 if df_filtered.empty:
                     st.info(f"Tidak ada kegiatan ditemukan untuk {nama_riwayat}.")
                 else:
-                    # Header receipt pakai st.markdown pendek (aman dari sanitizer)
-                    st.markdown(
-                        f"<div class='receipt-header' style='background:#14532d;color:white;text-align:center;"
-                        f"padding:1rem 1.25rem 0.85rem;border-radius:4px 4px 0 0;font-family:Courier New,monospace;'>"
-                        f"<h3 style='margin:0;font-size:1rem;font-weight:700;text-transform:uppercase;color:white;'>"
-                        f"Riwayat Kehadiran</h3>"
-                        f"<p style='margin:0.25rem 0 0;font-size:0.85rem;'>{nama_riwayat}</p></div>",
-                        unsafe_allow_html=True
-                    )
- 
-                    # Tiap item di-render terpisah — Streamlit tidak sanitasi per-item pendek
+                    items = ""
                     for _, row in df_filtered.iterrows():
                         unique_key = f"{row['tanggal']}|{row['kegiatan']}|{row['lokasi']}"
                         status = st.session_state.user_history_status.get(unique_key, "belum")
- 
                         if status == "hadir":
-                            badge = "Hadir"
-                            border_color = "#16a34a"
-                            badge_bg = "#dcfce7"; badge_color = "#15803d"
+                            badge_html = '<span class="history-badge-hadir">Hadir</span>'
                         elif status == "tidak_hadir":
-                            badge = "Tidak Hadir"
-                            border_color = "#dc2626"
-                            badge_bg = "#fee2e2"; badge_color = "#dc2626"
+                            badge_html = '<span class="history-badge-tidak">Tidak Hadir</span>'
                         else:
-                            badge = "— Belum Ditandai"
-                            border_color = "#9ca3af"
-                            badge_bg = "#f3f4f6"; badge_color = "#6b7280"
- 
+                            badge_html = '<span class="history-badge-netral">Belum Ditandai</span>'
+
                         peny_list = parse_penyerta(str(row["penyerta"]))
-                        peny_text = " • ".join(peny_list) if peny_list else str(row["penyerta"])
+                        peny_items = ''.join(f'<span>{p}</span>' for p in peny_list) if peny_list else f'<span>{str(row["penyerta"])}</span>'
                         tgl_fmt = row["tanggal_dt"].strftime("%A, %d %B %Y")
                         sudah_lewat = row["tanggal_dt"].date() <= date.today()
- 
-                        # Render item sebagai st.markdown pendek
-                        st.markdown(
-                            f"<div style='border-left:4px solid {border_color};background:#fffef8;"
-                            f"border-bottom:1px dashed #ddd8cc;padding:0.65rem 1rem 0.65rem 0.85rem;"
-                            f"font-family:Courier New,monospace;'>"
-                            f"<div style='font-weight:700;color:#14532d;font-size:0.9rem;'>{row['kegiatan'].title()}"
-                            f"<span style='margin-left:8px;font-size:0.72rem;font-weight:700;padding:2px 8px;"
-                            f"border-radius:3px;background:{badge_bg};color:{badge_color};'>{badge}</span></div>"
-                            f"<div style='display:flex;justify-content:space-between;font-size:0.8rem;color:#4b5563;margin-top:3px;'>"
-                            f"<span style='color:#6b7280;min-width:70px;'>Tanggal</span><span>{tgl_fmt}</span></div>"
-                            f"<div style='display:flex;justify-content:space-between;font-size:0.8rem;color:#4b5563;'>"
-                            f"<span style='color:#6b7280;min-width:70px;'>Lokasi</span><span>{row['lokasi']}</span></div>"
-                            f"<div style='display:flex;justify-content:space-between;font-size:0.8rem;color:#4b5563;'>"
-                            f"<span style='color:#6b7280;min-width:70px;'>Penyerta</span>"
-                            f"<span style='text-align:right;word-break:break-word;max-width:70%;'>{peny_text}</span></div>"
-                            f"</div>",
-                            unsafe_allow_html=True
-                        )
- 
-                        # Tombol Hadir/Tidak pakai st.button asli Streamlit (bukan HTML)
+
+                        # Tombol hanya untuk kegiatan yang sudah lewat / hari ini
+                        tombol_html = ""
                         if sudah_lewat:
-                            cb1, cb2, _ = st.columns([1, 1, 3])
-                            with cb1:
-                                if st.button("Hadir", key=f"h_{unique_key}"):
-                                    st.session_state.user_history_status[unique_key] = "hadir"
-                                    st.rerun()
-                            with cb2:
-                                if st.button("Tidak", key=f"t_{unique_key}"):
-                                    st.session_state.user_history_status[unique_key] = "tidak_hadir"
-                                    st.rerun()
- 
-                    # Footer receipt
-                    st.markdown(
-                        f"<div style='text-align:center;padding:0.75rem;color:#9ca3af;font-size:0.75rem;"
-                        f"border-top:2px dashed #c8c5b8;background:#fffef8;border-radius:0 0 4px 4px;"
-                        f"font-family:Courier New,monospace;'>"
-                        f"<div style='font-size:1.4rem;letter-spacing:0.05em;color:#374151;'>|||||||||||||||||||||||</div>"
-                        f"{len(df_filtered)} kegiatan &bull; Puskesmas Sangkali</div>",
-                        unsafe_allow_html=True
-                    )
- 
+                            # Gunakan link sederhana dengan query param
+                            tombol_html = f"""
+                            <div style="display:flex; gap:4px; align-items:center; margin-left:12px; flex-shrink:0;">
+                                <a href="?hadir_{unique_key}=1" style="text-decoration:none;">
+                                    <button type="button" style="background:#16a34a; color:white; border:none; padding:2px 10px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:500;">Hadir</button>
+                                </a>
+                                <a href="?tidak_{unique_key}=1" style="text-decoration:none;">
+                                    <button type="button" style="background:#dc2626; color:white; border:none; padding:2px 10px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:500;">Tidak</button>
+                                </a>
+                            </div>"""
+
+                        items += f"""<div class="receipt-item" style="display:flex; justify-content:space-between; align-items:flex-start;">
+                            <div style="flex:1;">
+                                <div class="receipt-item-title">{row['kegiatan']} {badge_html}</div>
+                                <div class="receipt-item-row"><span class="receipt-item-label">Tanggal</span><span class="receipt-item-value">{tgl_fmt}</span></div>
+                                <div class="receipt-item-row"><span class="receipt-item-label">Lokasi</span><span class="receipt-item-value">{row['lokasi']}</span></div>
+                                <div class="receipt-item-row"><span class="receipt-item-label">Penyerta</span><div class="receipt-item-value"><div class="receipt-penyerta-list">{peny_items}</div></div></div>
+                            </div>
+                            {tombol_html}
+                        </div>"""
+
+                    st.markdown(f"""<div class="receipt-box">
+                        <div class="receipt-header"><h3>Riwayat Kehadiran</h3><p>{nama_riwayat}</p></div>
+                        <div class="receipt-body">{items}</div>
+                        <div class="receipt-footer">
+                            <div class="receipt-barcode">|||||||||||||||||||||||</div>
+                            {len(df_filtered)} kegiatan
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+
+                    # Proses klik tombol
+                    query_params = st.query_params
+                    for key, value in query_params.items():
+                        if key.startswith("hadir_") and value == "1":
+                            unique_key = key[len("hadir_"):]
+                            st.session_state.user_history_status[unique_key] = "hadir"
+                            st.query_params.clear()
+                            st.rerun()
+                        elif key.startswith("tidak_") and value == "1":
+                            unique_key = key[len("tidak_"):]
+                            st.session_state.user_history_status[unique_key] = "tidak_hadir"
+                            st.query_params.clear()
+                            st.rerun()
         except requests.exceptions.ConnectionError:
-            st.error("Tidak dapat terhubung ke server. Pastikan server Django sudah berjalan.")
+            st.error("Tidak dapat terhubung ke server.")
+        except requests.exceptions.Timeout:
+            st.error("Koneksi timeout.")
         except Exception as e:
             st.error(f"Terjadi kesalahan: {str(e)}")
-
+            
     # Jadwal Terdekat
     st.markdown("---")
     st.markdown('<div style="display:flex;align-items:center;gap:8px;"><i class="fa-solid fa-calendar-week" style="color:#14532d;"></i><span style="font-size:1.2rem;font-weight:700;color:#14532d;">Jadwal Terdekat</span></div>', unsafe_allow_html=True)
