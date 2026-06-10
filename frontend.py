@@ -545,7 +545,7 @@ if st.session_state.page=="user":
                 if df_filtered.empty:
                     st.info(f"Tidak ada kegiatan ditemukan untuk {nama_riwayat}.")
                 else:
-                    # Tampilkan receipt dengan tombol di setiap item
+                    # Tampilkan receipt
                     items=""
                     for _,row in df_filtered.iterrows():
                         id_keg=row.get('id')
@@ -560,27 +560,11 @@ if st.session_state.page=="user":
                         peny_list = parse_penyerta(str(row['penyerta']))
                         peny_items = ''.join(f'<span>{p}</span>' for p in peny_list) if peny_list else f'<span>{str(row["penyerta"])}</span>'
 
-                        # Tombol hanya untuk kegiatan yang sudah lewat atau hari ini
-                        tombol_html = ""
-                        if row['tanggal_dt'].date()<=date.today():
-                            tombol_html = f"""
-                            <div style="display:flex; gap:6px; margin-top:4px;">
-                                <form action="" method="get" style="display:inline;">
-                                    <button type="submit" name="hadir_{id_keg}" style="background:#16a34a; color:white; border:none; padding:2px 10px; border-radius:4px; cursor:pointer; font-size:0.75rem;">Hadir</button>
-                                </form>
-                                <form action="" method="get" style="display:inline;">
-                                    <button type="submit" name="tidak_{id_keg}" style="background:#dc2626; color:white; border:none; padding:2px 10px; border-radius:4px; cursor:pointer; font-size:0.75rem;">Tidak</button>
-                                </form>
-                            </div>"""
-
-                        items+=f"""<div class="receipt-item" style="display:flex; justify-content:space-between; align-items:flex-start;">
-                            <div style="flex:1;">
-                                <div class="receipt-item-title">{row['kegiatan']} {badge_html}</div>
-                                <div class="receipt-item-row"><span class="receipt-item-label">Tanggal</span><span class="receipt-item-value">{row['tanggal_dt'].strftime('%A, %d %B %Y')}</span></div>
-                                <div class="receipt-item-row"><span class="receipt-item-label">Lokasi</span><span class="receipt-item-value">{row['lokasi']}</span></div>
-                                <div class="receipt-item-row"><span class="receipt-item-label">Penyerta</span><div class="receipt-item-value"><div class="receipt-penyerta-list">{peny_items}</div></div></div>
-                                {tombol_html}
-                            </div>
+                        items+=f"""<div class="receipt-item">
+                            <div class="receipt-item-title">{row['kegiatan']} {badge_html}</div>
+                            <div class="receipt-item-row"><span class="receipt-item-label">Tanggal</span><span class="receipt-item-value">{row['tanggal_dt'].strftime('%A, %d %B %Y')}</span></div>
+                            <div class="receipt-item-row"><span class="receipt-item-label">Lokasi</span><span class="receipt-item-value">{row['lokasi']}</span></div>
+                            <div class="receipt-item-row"><span class="receipt-item-label">Penyerta</span><div class="receipt-item-value"><div class="receipt-penyerta-list">{peny_items}</div></div></div>
                         </div>"""
 
                     st.markdown(f"""<div class="receipt-box">
@@ -592,19 +576,16 @@ if st.session_state.page=="user":
                         </div>
                     </div>""", unsafe_allow_html=True)
 
-                    # Proses klik tombol (menggunakan query params)
-                    query_params = st.query_params
-                    for key, value in query_params.items():
-                        if key.startswith("hadir_") and value == "":
-                            id_keg = int(key.split("_")[1])
-                            st.session_state.user_history_status[id_keg] = 'hadir'
-                            st.query_params.clear()
-                            st.rerun()
-                        elif key.startswith("tidak_") and value == "":
-                            id_keg = int(key.split("_")[1])
-                            st.session_state.user_history_status[id_keg] = 'tidak_hadir'
-                            st.query_params.clear()
-                            st.rerun()
+                    # Tombol Hadir/Tidak di bawah setiap item (di luar receipt)
+                    for _,row in df_filtered.iterrows():
+                        if row['tanggal_dt'].date()<=date.today():
+                            ca,cb,_=st.columns([1,1,2])
+                            with ca:
+                                if st.button("Hadir", key=f"hadir_{row.get('id')}"):
+                                    st.session_state.user_history_status[row.get('id')]='hadir'; st.rerun()
+                            with cb:
+                                if st.button("Tidak", key=f"tidak_{row.get('id')}"):
+                                    st.session_state.user_history_status[row.get('id')]='tidak_hadir'; st.rerun()
         except requests.exceptions.ConnectionError:
             st.error("Tidak dapat terhubung ke server.")
         except requests.exceptions.Timeout:
