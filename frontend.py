@@ -540,9 +540,12 @@ if st.session_state.page=="user":
                         st.info(f"Tidak ada kegiatan ditemukan untuk {nama_riwayat}.")
                     else:
                         items = ""
+                        # Daftar untuk melacak tombol yang perlu ditampilkan
+                        kegiatan_tombol = []
                         for _, row in df_filtered.iterrows():
-                            id_keg = row.get('id')
-                            status = st.session_state.user_history_status.get(id_keg, 'belum')
+                            # Key unik berdasarkan kombinasi tanggal, kegiatan, lokasi
+                            unique_key = f"{row['tanggal']}|{row['kegiatan']}|{row['lokasi']}"
+                            status = st.session_state.user_history_status.get(unique_key, 'belum')
                             if status == 'hadir':
                                 badge_html = '<span class="history-badge-hadir">Hadir</span>'
                             elif status == 'tidak_hadir':
@@ -556,14 +559,16 @@ if st.session_state.page=="user":
                             # Tombol hanya untuk kegiatan yang sudah lewat atau hari ini
                             tombol_html = ""
                             if row['tanggal_dt'].date() <= date.today():
+                                # Simpan unique_key untuk diproses nanti
+                                kegiatan_tombol.append(unique_key)
                                 tombol_html = f"""
                                 <div style="display:flex; gap:4px; flex-shrink:0; margin-left:10px;">
-                                    <form action="" method="get" style="display:inline;">
-                                        <button type="submit" name="hadir_{id_keg}" style="background:#16a34a; color:white; border:none; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:0.7rem;">Hadir</button>
-                                    </form>
-                                    <form action="" method="get" style="display:inline;">
-                                        <button type="submit" name="tidak_{id_keg}" style="background:#dc2626; color:white; border:none; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:0.7rem;">Tidak</button>
-                                    </form>
+                                    <a href="?hadir_{unique_key}=1" style="text-decoration:none;">
+                                        <button type="button" style="background:#16a34a; color:white; border:none; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:0.7rem;">Hadir</button>
+                                    </a>
+                                    <a href="?tidak_{unique_key}=1" style="text-decoration:none;">
+                                        <button type="button" style="background:#dc2626; color:white; border:none; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:0.7rem;">Tidak</button>
+                                    </a>
                                 </div>"""
 
                             items += f"""<div class="receipt-item" style="display:flex; justify-content:space-between; align-items:flex-start;">
@@ -585,17 +590,17 @@ if st.session_state.page=="user":
                             </div>
                         </div>""", unsafe_allow_html=True)
 
-                        # Proses klik tombol (gunakan query params)
+                        # Proses klik tombol (menggunakan query params)
                         query_params = st.query_params
                         for key, value in query_params.items():
-                            if key.startswith("hadir_") and value == "":
-                                id_keg = int(key.split("_")[1])
-                                st.session_state.user_history_status[id_keg] = 'hadir'
+                            if key.startswith("hadir_") and value == "1":
+                                unique_key = key[len("hadir_"):]
+                                st.session_state.user_history_status[unique_key] = 'hadir'
                                 st.query_params.clear()
                                 st.rerun()
-                            elif key.startswith("tidak_") and value == "":
-                                id_keg = int(key.split("_")[1])
-                                st.session_state.user_history_status[id_keg] = 'tidak_hadir'
+                            elif key.startswith("tidak_") and value == "1":
+                                unique_key = key[len("tidak_"):]
+                                st.session_state.user_history_status[unique_key] = 'tidak_hadir'
                                 st.query_params.clear()
                                 st.rerun()
             else:
