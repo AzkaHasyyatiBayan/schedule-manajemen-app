@@ -2,6 +2,7 @@
 Django settings for puskesmas project.
 """
 
+import os
 from pathlib import Path
 from datetime import timedelta
 
@@ -11,7 +12,7 @@ SECRET_KEY = 'django-insecure-!3y)l$s5z2t8hxj4n#+*+_z-^cwgz=qb&io5^zs9amou!8ae=e
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -21,7 +22,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'rest_framework.authtoken',   # ← Token Auth
+    'rest_framework.authtoken',
     'corsheaders',
     'kegiatan',
 ]
@@ -31,8 +32,6 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    # CSRF dinonaktifkan untuk API endpoint (sudah diganti Token Auth)
-    # 'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -57,12 +56,22 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'puskesmas.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# ─── DATABASE ────────────────────────────────────────────────────────────────
+if os.environ.get('DATABASE_URL'):
+    import dj_database_url
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=os.environ['DATABASE_URL'],
+            conn_max_age=600
+        )
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -77,6 +86,8 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ─── Django REST Framework ───────────────────────────────────────────────────
@@ -87,7 +98,6 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
-    # Throttling untuk keamanan login brute-force
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
@@ -95,7 +105,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '60/minute',
         'user': '300/minute',
-        'login': '5/minute',   # custom scope untuk login
+        'login': '5/minute',
     },
 }
 
@@ -103,7 +113,8 @@ REST_FRAMEWORK = {
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:8501',
     'http://127.0.0.1:8501',
+    'https://*.streamlit.app',
 ]
 CORS_ALLOW_CREDENTIALS = True
 
-APPEND_SLASH = False
+APPEND_SLASH = True
