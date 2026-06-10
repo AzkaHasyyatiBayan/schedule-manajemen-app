@@ -101,7 +101,7 @@ for key, default in [
     if key not in st.session_state:
         st.session_state[key] = default
 
-API_BASE = "https://web-production-f573b.up.railway.app/api"
+API_BASE = "https://web-production-dc35a.up.railway.app/api"
 
 DAFTAR_NAMA = [
     "Isep Deni Herdian, S.Kep.,MMRS","Isep Suhendar,SKM",
