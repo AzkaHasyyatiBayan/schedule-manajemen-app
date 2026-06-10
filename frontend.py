@@ -510,32 +510,34 @@ if st.session_state.page=="user":
     with col2:
         st.markdown('<div class="data-card"><div style="display:flex;align-items:center;gap:6px;margin-bottom:0.5rem"><i class="fa-solid fa-circle-info" style="color:#14532d;"></i><span style="font-weight:700;color:#14532d;">Informasi</span></div><ul style="font-size:0.88rem;line-height:1.8;"><li>Datang 15 menit lebih awal</li><li>Bawa KMS/BPJS</li><li>Gunakan masker</li></ul></div>', unsafe_allow_html=True)
 
-        # ── Riwayat Kehadiran (receipt style) ──
+        # ── Riwayat Kehadiran ──
     st.markdown("---")
     st.markdown('<div style="display:flex;align-items:center;gap:8px;margin-bottom:0.5rem"><i class="fa-solid fa-clock-rotate-left" style="color:#14532d;"></i><span style="font-size:1.2rem;font-weight:700;color:#14532d;">Riwayat Kehadiran Saya</span></div>', unsafe_allow_html=True)
-    cf1,cf2,cf3=st.columns([2,2,1])
-    with cf1: nama_riwayat=st.selectbox("Nama", DAFTAR_NAMA, key="nama_riwayat")
-    with cf2: bulan_riwayat=st.selectbox("Bulan", ["Semua"]+list(calendar.month_name)[1:], key="bulan_riwayat")
-    with cf3: tahun_riwayat=st.number_input("Tahun", value=datetime.now().year, min_value=2020, max_value=2030)
+    cf1, cf2, cf3 = st.columns([2, 2, 1])
+    with cf1:
+        nama_riwayat = st.selectbox("Nama", DAFTAR_NAMA, key="nama_riwayat")
+    with cf2:
+        bulan_riwayat = st.selectbox("Bulan", ["Semua"] + list(calendar.month_name)[1:], key="bulan_riwayat")
+    with cf3:
+        tahun_riwayat = st.number_input("Tahun", value=datetime.now().year, min_value=2020, max_value=2030)
 
     if st.button("Tampilkan Riwayat"):
         try:
-            # Gunakan endpoint search-user (publik)
             resp = api_get("search-user/", params={"nama": nama_riwayat})
             raw_data = None
             if resp.status_code == 200:
                 raw_data = resp.json()
             else:
-                # fallback ke kegiatan/ (filter manual)
-                for use_auth in ([True,False] if st.session_state.logged_in else [False]):
+                for use_auth in ([True, False] if st.session_state.logged_in else [False]):
                     try:
                         r2 = api_get("kegiatan/", auth=use_auth)
                         if r2.status_code == 200:
                             all_d = r2.json()
                             kw = nama_riwayat.split(",")[0].strip()
-                            raw_data = [d for d in all_d if kw.lower() in d.get("penyerta","").lower()]
+                            raw_data = [d for d in all_d if kw.lower() in d.get("penyerta", "").lower()]
                             break
-                    except: continue
+                    except:
+                        continue
 
             if not raw_data:
                 st.info("Belum ada data kegiatan di sistem.")
@@ -551,10 +553,28 @@ if st.session_state.page=="user":
                 if df_filtered.empty:
                     st.info(f"Tidak ada kegiatan ditemukan untuk {nama_riwayat}.")
                 else:
-                    items = ""
-                    for _, row in df_filtered.iterrows():
+                    # Header receipt
+                    st.markdown(f"""
+                    <div class="receipt-box">
+                        <div class="receipt-header">
+                            <h3>Riwayat Kehadiran</h3>
+                            <p>{nama_riwayat}</p>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    today_ = date.today()
+                    rows_list = list(df_filtered.iterrows())
+
+                    for idx, (_, row) in enumerate(rows_list):
                         unique_key = f"{row['tanggal']}|{row['kegiatan']}|{row['lokasi']}"
                         status = st.session_state.user_history_status.get(unique_key, "belum")
+                        tgl_dt = row["tanggal_dt"]
+                        tgl_fmt = tgl_dt.strftime("%A, %d %B %Y")
+                        sudah_lewat = tgl_dt.date() <= today_
+                        is_last = (idx == len(rows_list) - 1)
+
+                        # Badge status kehadiran
                         if status == "hadir":
                             badge_html = '<span class="history-badge-hadir">Hadir</span>'
                         elif status == "tidak_hadir":
@@ -562,64 +582,92 @@ if st.session_state.page=="user":
                         else:
                             badge_html = '<span class="history-badge-netral">Belum Ditandai</span>'
 
+                        # Penyerta
                         peny_list = parse_penyerta(str(row["penyerta"]))
-                        peny_items = ''.join(f'<span>{p}</span>' for p in peny_list) if peny_list else f'<span>{str(row["penyerta"])}</span>'
-                        tgl_fmt = row["tanggal_dt"].strftime("%A, %d %B %Y")
-                        sudah_lewat = row["tanggal_dt"].date() <= date.today()
+                        peny_html = "".join(
+                            f'<span style="display:block;margin-bottom:0.1rem;">{p}</span>'
+                            for p in peny_list
+                        ) if peny_list else f'<span>{str(row["penyerta"])}</span>'
 
-                        # Tombol hanya untuk kegiatan yang sudah lewat / hari ini
-                        tombol_html = ""
-                        if sudah_lewat:
-                            # Gunakan link sederhana dengan query param
-                            tombol_html = f"""
-                            <div style="display:flex; gap:4px; align-items:center; margin-left:12px; flex-shrink:0;">
-                                <a href="?hadir_{unique_key}=1" style="text-decoration:none;">
-                                    <button type="button" style="background:#16a34a; color:white; border:none; padding:2px 10px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:500;">Hadir</button>
-                                </a>
-                                <a href="?tidak_{unique_key}=1" style="text-decoration:none;">
-                                    <button type="button" style="background:#dc2626; color:white; border:none; padding:2px 10px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:500;">Tidak</button>
-                                </a>
-                            </div>"""
+                        # Border bawah kecuali item terakhir
+                        border_style = "border-bottom:1px dashed #ddd8cc;" if not is_last else ""
 
-                        items += f"""<div class="receipt-item" style="display:flex; justify-content:space-between; align-items:flex-start;">
-                            <div style="flex:1;">
-                                <div class="receipt-item-title">{row['kegiatan']} {badge_html}</div>
-                                <div class="receipt-item-row"><span class="receipt-item-label">Tanggal</span><span class="receipt-item-value">{tgl_fmt}</span></div>
-                                <div class="receipt-item-row"><span class="receipt-item-label">Lokasi</span><span class="receipt-item-value">{row['lokasi']}</span></div>
-                                <div class="receipt-item-row"><span class="receipt-item-label">Penyerta</span><div class="receipt-item-value"><div class="receipt-penyerta-list">{peny_items}</div></div></div>
+                        # Render item receipt (info saja, tanpa tombol)
+                        st.markdown(f"""
+                        <div class="receipt-box" style="margin:0;border-radius:0;box-shadow:none;
+                             border-top:none;border-left:1px solid #e2e0d8;border-right:1px solid #e2e0d8;
+                             border-bottom:{'1px solid #e2e0d8' if is_last else 'none'};">
+                            <div class="receipt-body" style="padding:0.6rem 1.25rem;">
+                                <div style="{border_style}padding-bottom:{'0.6rem' if not is_last else '0'};">
+                                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                                        <div style="flex:1;min-width:0;">
+                                            <div class="receipt-item-title" style="margin-bottom:0.3rem;">
+                                                {row['kegiatan']}
+                                            </div>
+                                            <div class="receipt-item-row">
+                                                <span class="receipt-item-label">Tanggal</span>
+                                                <span class="receipt-item-value">{tgl_fmt}</span>
+                                            </div>
+                                            <div class="receipt-item-row">
+                                                <span class="receipt-item-label">Lokasi</span>
+                                                <span class="receipt-item-value">{row['lokasi']}</span>
+                                            </div>
+                                            <div class="receipt-item-row" style="align-items:flex-start;">
+                                                <span class="receipt-item-label">Penyerta</span>
+                                                <div class="receipt-item-value">{peny_html}</div>
+                                            </div>
+                                            <div style="margin-top:0.35rem;">{badge_html}</div>
+                                        </div>
+                                        {'<div style="flex-shrink:0;width:80px;"></div>' if sudah_lewat else ''}
+                                    </div>
+                                </div>
                             </div>
-                            {tombol_html}
-                        </div>"""
+                        </div>
+                        """, unsafe_allow_html=True)
 
-                    st.markdown(f"""<div class="receipt-box">
-                        <div class="receipt-header"><h3>Riwayat Kehadiran</h3><p>{nama_riwayat}</p></div>
-                        <div class="receipt-body">{items}</div>
+                        # Tombol Streamlit native di kolom kanan — hanya untuk kegiatan lewat/hari ini
+                        if sudah_lewat:
+                            # Buat layout: konten kiri + tombol kanan sejajar dengan item di atas
+                            # Gunakan negative margin trick agar tombol "menempel" ke item receipt
+                            _, col_btn = st.columns([3, 1])
+                            with col_btn:
+                                btn_container = st.container()
+                                with btn_container:
+                                    if st.button(
+                                        "✓ Hadir",
+                                        key=f"hadir_{unique_key}_{idx}",
+                                        use_container_width=True,
+                                        type="primary" if status != "hadir" else "secondary",
+                                    ):
+                                        st.session_state.user_history_status[unique_key] = "hadir"
+                                        st.rerun()
+                                    if st.button(
+                                        "✗ Tidak",
+                                        key=f"tidak_{unique_key}_{idx}",
+                                        use_container_width=True,
+                                    ):
+                                        st.session_state.user_history_status[unique_key] = "tidak_hadir"
+                                        st.rerun()
+
+                    # Footer receipt
+                    st.markdown(f"""
+                    <div class="receipt-box" style="margin:0;border-radius:0 0 4px 4px;box-shadow:none;
+                         border-top:none;border-left:1px solid #e2e0d8;border-right:1px solid #e2e0d8;
+                         border-bottom:1px solid #e2e0d8;">
                         <div class="receipt-footer">
                             <div class="receipt-barcode">|||||||||||||||||||||||</div>
                             {len(df_filtered)} kegiatan
                         </div>
-                    </div>""", unsafe_allow_html=True)
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                    # Proses klik tombol
-                    query_params = st.query_params
-                    for key, value in query_params.items():
-                        if key.startswith("hadir_") and value == "1":
-                            unique_key = key[len("hadir_"):]
-                            st.session_state.user_history_status[unique_key] = "hadir"
-                            st.query_params.clear()
-                            st.rerun()
-                        elif key.startswith("tidak_") and value == "1":
-                            unique_key = key[len("tidak_"):]
-                            st.session_state.user_history_status[unique_key] = "tidak_hadir"
-                            st.query_params.clear()
-                            st.rerun()
         except requests.exceptions.ConnectionError:
             st.error("Tidak dapat terhubung ke server.")
         except requests.exceptions.Timeout:
             st.error("Koneksi timeout.")
         except Exception as e:
             st.error(f"Terjadi kesalahan: {str(e)}")
-            
+
     # Jadwal Terdekat
     st.markdown("---")
     st.markdown('<div style="display:flex;align-items:center;gap:8px;"><i class="fa-solid fa-calendar-week" style="color:#14532d;"></i><span style="font-size:1.2rem;font-weight:700;color:#14532d;">Jadwal Terdekat</span></div>', unsafe_allow_html=True)
