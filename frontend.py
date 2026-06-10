@@ -510,17 +510,17 @@ if st.session_state.page=="user":
     with col2:
         st.markdown('<div class="data-card"><div style="display:flex;align-items:center;gap:6px;margin-bottom:0.5rem"><i class="fa-solid fa-circle-info" style="color:#14532d;"></i><span style="font-weight:700;color:#14532d;">Informasi</span></div><ul style="font-size:0.88rem;line-height:1.8;"><li>Datang 15 menit lebih awal</li><li>Bawa KMS/BPJS</li><li>Gunakan masker</li></ul></div>', unsafe_allow_html=True)
 
-    # ── Riwayat Kehadiran (style receipt) ──
+    # Riwayat Kehadiran
     st.markdown("---")
     st.markdown('<div style="display:flex;align-items:center;gap:8px;margin-bottom:0.5rem"><i class="fa-solid fa-clock-rotate-left" style="color:#14532d;"></i><span style="font-size:1.2rem;font-weight:700;color:#14532d;">Riwayat Kehadiran Saya</span></div>', unsafe_allow_html=True)
     cf1,cf2,cf3=st.columns([2,2,1])
     with cf1: nama_riwayat=st.selectbox("Nama", DAFTAR_NAMA, key="nama_riwayat")
     with cf2: bulan_riwayat=st.selectbox("Bulan", ["Semua"]+list(calendar.month_name)[1:], key="bulan_riwayat")
     with cf3: tahun_riwayat=st.number_input("Tahun", value=datetime.now().year, min_value=2020, max_value=2030)
-
+ 
     if st.button("Tampilkan Riwayat"):
         try:
-            # Gunakan endpoint publik search-user (tanpa autentikasi)
+            # Gunakan endpoint publik search-user (tanpa autentikasi) - lebih andal untuk user page
             resp = api_get("search-user/", params={"nama": nama_riwayat})
             if resp.status_code == 200:
                 raw_data = resp.json()
@@ -535,15 +535,13 @@ if st.session_state.page=="user":
                         bulan_num = list(calendar.month_name).index(bulan_riwayat)
                         df_filtered = df_filtered[df_filtered['tanggal_dt'].dt.month == bulan_num]
                     df_filtered = df_filtered.sort_values('tanggal_dt', ascending=False)
-
+ 
                     if df_filtered.empty:
                         st.info(f"Tidak ada kegiatan ditemukan untuk {nama_riwayat}.")
                     else:
                         items = ""
-                        # Daftar untuk melacak tombol yang perlu ditampilkan
-                        kegiatan_tombol = []
                         for _, row in df_filtered.iterrows():
-                            # Key unik berdasarkan kombinasi tanggal, kegiatan, lokasi
+                            # Key unik: tanggal|kegiatan|lokasi (tidak pakai id agar konsisten)
                             unique_key = f"{row['tanggal']}|{row['kegiatan']}|{row['lokasi']}"
                             status = st.session_state.user_history_status.get(unique_key, 'belum')
                             if status == 'hadir':
@@ -552,35 +550,34 @@ if st.session_state.page=="user":
                                 badge_html = '<span class="history-badge-tidak">Tidak Hadir</span>'
                             else:
                                 badge_html = '<span class="history-badge-netral">Belum Ditandai</span>'
-
+ 
                             peny_list = parse_penyerta(str(row['penyerta']))
                             peny_items = ''.join(f'<span>{p}</span>' for p in peny_list) if peny_list else f'<span>{str(row["penyerta"])}</span>'
-
-                            # Tombol hanya untuk kegiatan yang sudah lewat atau hari ini
+ 
                             tombol_html = ""
                             if row['tanggal_dt'].date() <= date.today():
-                                # Simpan unique_key untuk diproses nanti
-                                kegiatan_tombol.append(unique_key)
+                                # Encode key agar aman di URL (ganti karakter bermasalah)
+                                safe_key = unique_key.replace("&", "dan").replace("=", "-").replace("#", "")
                                 tombol_html = f"""
-                                <div style="display:flex; gap:4px; flex-shrink:0; margin-left:10px;">
-                                    <a href="?hadir_{unique_key}=1" style="text-decoration:none;">
-                                        <button type="button" style="background:#16a34a; color:white; border:none; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:0.7rem;">Hadir</button>
+                                <div style="display:flex;gap:4px;flex-shrink:0;margin-left:10px;">
+                                    <a href="?hadir_{safe_key}=1" style="text-decoration:none;">
+                                        <button type="button" style="background:#16a34a;color:white;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:0.7rem;">Hadir</button>
                                     </a>
-                                    <a href="?tidak_{unique_key}=1" style="text-decoration:none;">
-                                        <button type="button" style="background:#dc2626; color:white; border:none; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:0.7rem;">Tidak</button>
+                                    <a href="?tidak_{safe_key}=1" style="text-decoration:none;">
+                                        <button type="button" style="background:#dc2626;color:white;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:0.7rem;">Tidak</button>
                                     </a>
                                 </div>"""
-
-                            items += f"""<div class="receipt-item" style="display:flex; justify-content:space-between; align-items:flex-start;">
+ 
+                            items += f"""<div class="receipt-item" style="display:flex;justify-content:space-between;align-items:flex-start;">
                                 <div style="flex:1;">
-                                    <div class="receipt-item-title">{row['kegiatan']} {badge_html}</div>
+                                    <div class="receipt-item-title">{row['kegiatan'].title()} {badge_html}</div>
                                     <div class="receipt-item-row"><span class="receipt-item-label">Tanggal</span><span class="receipt-item-value">{row['tanggal_dt'].strftime('%A, %d %B %Y')}</span></div>
                                     <div class="receipt-item-row"><span class="receipt-item-label">Lokasi</span><span class="receipt-item-value">{row['lokasi']}</span></div>
-                                    <div class="receipt-item-row"><span class="receipt-item-label">Penyerta</span><div class="receipt-item-value"><div class="receipt-penyerta-list">{peny_items}</div></div></div>
+                                    <div class="receipt-item-row"><span class="receipt-item-label">Penyerta</span><div class="receipt-item-value" style="text-align:right;">{'<br>'.join(peny_list) if peny_list else str(row["penyerta"])}</div></div>
                                 </div>
                                 {tombol_html}
                             </div>"""
-
+ 
                         st.markdown(f"""<div class="receipt-box">
                             <div class="receipt-header"><h3>Riwayat Kehadiran</h3><p>{nama_riwayat}</p></div>
                             <div class="receipt-body">{items}</div>
@@ -589,22 +586,30 @@ if st.session_state.page=="user":
                                 {len(df_filtered)} kegiatan
                             </div>
                         </div>""", unsafe_allow_html=True)
-
-                        # Proses klik tombol (menggunakan query params)
-                        query_params = st.query_params
-                        for key, value in query_params.items():
-                            if key.startswith("hadir_") and value == "1":
-                                unique_key = key[len("hadir_"):]
-                                st.session_state.user_history_status[unique_key] = 'hadir'
-                                st.query_params.clear()
-                                st.rerun()
-                            elif key.startswith("tidak_") and value == "1":
-                                unique_key = key[len("tidak_"):]
-                                st.session_state.user_history_status[unique_key] = 'tidak_hadir'
-                                st.query_params.clear()
-                                st.rerun()
             else:
-                st.warning("Gagal memuat data. Pastikan server berjalan.")
+                # Fallback ke endpoint kegiatan/ jika search-user tidak tersedia
+                raw_data = None
+                for use_auth in ([True, False] if st.session_state.logged_in else [False]):
+                    try:
+                        r = api_get("kegiatan/", auth=use_auth)
+                        if r.status_code == 200:
+                            raw_data = r.json(); break
+                    except: continue
+                if raw_data:
+                    df = pd.DataFrame(raw_data)
+                    df['tanggal_dt'] = pd.to_datetime(df['tanggal'], errors='coerce')
+                    keyword = nama_riwayat.split(',')[0].strip()
+                    df_f = df[df['penyerta'].str.contains(keyword, case=False, na=False)]
+                    df_f = df_f[df_f['tanggal_dt'].dt.year == tahun_riwayat]
+                    if bulan_riwayat != "Semua":
+                        bnum = list(calendar.month_name).index(bulan_riwayat)
+                        df_f = df_f[df_f['tanggal_dt'].dt.month == bnum]
+                    if df_f.empty:
+                        st.info(f"Tidak ada kegiatan ditemukan untuk {nama_riwayat}.")
+                    else:
+                        st.info(f"Ditemukan {len(df_f)} kegiatan (via fallback).")
+                else:
+                    st.warning("Gagal memuat data. Pastikan server berjalan.")
         except requests.exceptions.ConnectionError:
             st.error("Tidak dapat terhubung ke server. Periksa koneksi internet.")
         except Exception as e:
