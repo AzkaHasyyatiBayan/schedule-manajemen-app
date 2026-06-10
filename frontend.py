@@ -520,76 +520,88 @@ if st.session_state.page=="user":
 
     if st.button("Tampilkan Riwayat"):
         try:
-            raw_data=None
-            for use_auth in ([True,False] if st.session_state.logged_in else [False]):
-                try:
-                    r=api_get("kegiatan/", auth=use_auth)
-                    if r.status_code==200:
-                        raw_data=r.json(); break
-                except: continue
-
-            if raw_data is None:
-                st.warning("Gagal memuat data. Pastikan server berjalan.")
-            elif not raw_data:
-                st.info("Belum ada data kegiatan di sistem.")
-            else:
-                df=pd.DataFrame(raw_data)
-                df['tanggal_dt']=pd.to_datetime(df['tanggal'], errors='coerce')
-                keyword_utama=nama_riwayat.split(',')[0].strip()
-                df_filtered=df[df['penyerta'].str.contains(keyword_utama, case=False, na=False)]
-                df_filtered=df_filtered[df_filtered['tanggal_dt'].dt.year==tahun_riwayat]
-                if bulan_riwayat!="Semua":
-                    bulan_num=list(calendar.month_name).index(bulan_riwayat)
-                    df_filtered=df_filtered[df_filtered['tanggal_dt'].dt.month==bulan_num]
-                df_filtered=df_filtered.sort_values('tanggal_dt', ascending=False)
-                if df_filtered.empty:
-                    st.info(f"Tidak ada kegiatan ditemukan untuk {nama_riwayat}.")
+            # Gunakan endpoint publik search-user (tanpa autentikasi)
+            resp = api_get("search-user/", params={"nama": nama_riwayat})
+            if resp.status_code == 200:
+                raw_data = resp.json()
+                if not raw_data:
+                    st.info("Belum ada data kegiatan di sistem.")
                 else:
-                    # Tampilkan receipt
-                    items=""
-                    for _,row in df_filtered.iterrows():
-                        id_keg=row.get('id')
-                        status=st.session_state.user_history_status.get(id_keg,'belum')
-                        if status=='hadir':
-                            badge_html = '<span class="history-badge-hadir">Hadir</span>'
-                        elif status=='tidak_hadir':
-                            badge_html = '<span class="history-badge-tidak">Tidak Hadir</span>'
-                        else:
-                            badge_html = '<span class="history-badge-netral">Belum Ditandai</span>'
+                    df = pd.DataFrame(raw_data)
+                    df['tanggal_dt'] = pd.to_datetime(df['tanggal'], errors='coerce')
+                    # Filter tahun & bulan
+                    df_filtered = df[df['tanggal_dt'].dt.year == tahun_riwayat]
+                    if bulan_riwayat != "Semua":
+                        bulan_num = list(calendar.month_name).index(bulan_riwayat)
+                        df_filtered = df_filtered[df_filtered['tanggal_dt'].dt.month == bulan_num]
+                    df_filtered = df_filtered.sort_values('tanggal_dt', ascending=False)
 
-                        peny_list = parse_penyerta(str(row['penyerta']))
-                        peny_items = ''.join(f'<span>{p}</span>' for p in peny_list) if peny_list else f'<span>{str(row["penyerta"])}</span>'
+                    if df_filtered.empty:
+                        st.info(f"Tidak ada kegiatan ditemukan untuk {nama_riwayat}.")
+                    else:
+                        items = ""
+                        for _, row in df_filtered.iterrows():
+                            id_keg = row.get('id')
+                            status = st.session_state.user_history_status.get(id_keg, 'belum')
+                            if status == 'hadir':
+                                badge_html = '<span class="history-badge-hadir">Hadir</span>'
+                            elif status == 'tidak_hadir':
+                                badge_html = '<span class="history-badge-tidak">Tidak Hadir</span>'
+                            else:
+                                badge_html = '<span class="history-badge-netral">Belum Ditandai</span>'
 
-                        items+=f"""<div class="receipt-item">
-                            <div class="receipt-item-title">{row['kegiatan']} {badge_html}</div>
-                            <div class="receipt-item-row"><span class="receipt-item-label">Tanggal</span><span class="receipt-item-value">{row['tanggal_dt'].strftime('%A, %d %B %Y')}</span></div>
-                            <div class="receipt-item-row"><span class="receipt-item-label">Lokasi</span><span class="receipt-item-value">{row['lokasi']}</span></div>
-                            <div class="receipt-item-row"><span class="receipt-item-label">Penyerta</span><div class="receipt-item-value"><div class="receipt-penyerta-list">{peny_items}</div></div></div>
-                        </div>"""
+                            peny_list = parse_penyerta(str(row['penyerta']))
+                            peny_items = ''.join(f'<span>{p}</span>' for p in peny_list) if peny_list else f'<span>{str(row["penyerta"])}</span>'
 
-                    st.markdown(f"""<div class="receipt-box">
-                        <div class="receipt-header"><h3>Riwayat Kehadiran</h3><p>{nama_riwayat}</p></div>
-                        <div class="receipt-body">{items}</div>
-                        <div class="receipt-footer">
-                            <div class="receipt-barcode">|||||||||||||||||||||||</div>
-                            {len(df_filtered)} kegiatan
-                        </div>
-                    </div>""", unsafe_allow_html=True)
+                            # Tombol hanya untuk kegiatan yang sudah lewat atau hari ini
+                            tombol_html = ""
+                            if row['tanggal_dt'].date() <= date.today():
+                                tombol_html = f"""
+                                <div style="display:flex; gap:4px; flex-shrink:0; margin-left:10px;">
+                                    <form action="" method="get" style="display:inline;">
+                                        <button type="submit" name="hadir_{id_keg}" style="background:#16a34a; color:white; border:none; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:0.7rem;">Hadir</button>
+                                    </form>
+                                    <form action="" method="get" style="display:inline;">
+                                        <button type="submit" name="tidak_{id_keg}" style="background:#dc2626; color:white; border:none; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:0.7rem;">Tidak</button>
+                                    </form>
+                                </div>"""
 
-                    # Tombol Hadir/Tidak di bawah setiap item (di luar receipt)
-                    for _,row in df_filtered.iterrows():
-                        if row['tanggal_dt'].date()<=date.today():
-                            ca,cb,_=st.columns([1,1,2])
-                            with ca:
-                                if st.button("Hadir", key=f"hadir_{row.get('id')}"):
-                                    st.session_state.user_history_status[row.get('id')]='hadir'; st.rerun()
-                            with cb:
-                                if st.button("Tidak", key=f"tidak_{row.get('id')}"):
-                                    st.session_state.user_history_status[row.get('id')]='tidak_hadir'; st.rerun()
+                            items += f"""<div class="receipt-item" style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                <div style="flex:1;">
+                                    <div class="receipt-item-title">{row['kegiatan']} {badge_html}</div>
+                                    <div class="receipt-item-row"><span class="receipt-item-label">Tanggal</span><span class="receipt-item-value">{row['tanggal_dt'].strftime('%A, %d %B %Y')}</span></div>
+                                    <div class="receipt-item-row"><span class="receipt-item-label">Lokasi</span><span class="receipt-item-value">{row['lokasi']}</span></div>
+                                    <div class="receipt-item-row"><span class="receipt-item-label">Penyerta</span><div class="receipt-item-value"><div class="receipt-penyerta-list">{peny_items}</div></div></div>
+                                </div>
+                                {tombol_html}
+                            </div>"""
+
+                        st.markdown(f"""<div class="receipt-box">
+                            <div class="receipt-header"><h3>Riwayat Kehadiran</h3><p>{nama_riwayat}</p></div>
+                            <div class="receipt-body">{items}</div>
+                            <div class="receipt-footer">
+                                <div class="receipt-barcode">|||||||||||||||||||||||</div>
+                                {len(df_filtered)} kegiatan
+                            </div>
+                        </div>""", unsafe_allow_html=True)
+
+                        # Proses klik tombol (gunakan query params)
+                        query_params = st.query_params
+                        for key, value in query_params.items():
+                            if key.startswith("hadir_") and value == "":
+                                id_keg = int(key.split("_")[1])
+                                st.session_state.user_history_status[id_keg] = 'hadir'
+                                st.query_params.clear()
+                                st.rerun()
+                            elif key.startswith("tidak_") and value == "":
+                                id_keg = int(key.split("_")[1])
+                                st.session_state.user_history_status[id_keg] = 'tidak_hadir'
+                                st.query_params.clear()
+                                st.rerun()
+            else:
+                st.warning("Gagal memuat data. Pastikan server berjalan.")
         except requests.exceptions.ConnectionError:
-            st.error("Tidak dapat terhubung ke server.")
-        except requests.exceptions.Timeout:
-            st.error("Koneksi timeout.")
+            st.error("Tidak dapat terhubung ke server. Periksa koneksi internet.")
         except Exception as e:
             st.error(f"Terjadi kesalahan: {str(e)}")
 
