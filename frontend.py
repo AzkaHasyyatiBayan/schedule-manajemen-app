@@ -40,14 +40,13 @@ st.markdown("""
 .sidebar-puskesmas-name { font-size:0.95rem; font-weight:700; text-align:center; margin:0.4rem 0 0.25rem; width:100%; }
 .sidebar-puskesmas-sub { font-size:0.75rem; text-align:center; opacity:0.75; margin-bottom:0.5rem; width:100%; }
 .sidebar-menu-label { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; font-weight:600; padding:0.5rem 0 0.2rem; opacity:0.55; text-align:center !important; }
-.sidebar-menu-icon { display:inline-flex; align-items:center; gap:6px; font-size:0.85rem; margin-bottom:2px; }
 .sidebar-user-badge { font-size:0.82rem; text-align:center; margin:4px 0 8px; display:block; padding:4px 0; }
 .badge-online { display:inline-flex; align-items:center; gap:5px; background:rgba(187,247,208,0.2); color:#bbf7d0; font-size:0.78rem; font-weight:600; padding:3px 10px; border-radius:999px; border:1px solid rgba(187,247,208,0.3); }
 .badge-offline { display:inline-flex; align-items:center; gap:5px; background:rgba(254,202,202,0.2); color:#fecaca; font-size:0.78rem; font-weight:600; padding:3px 10px; border-radius:999px; border:1px solid rgba(254,202,202,0.3); }
 .main-header { background:linear-gradient(135deg,rgba(20,83,45,0.85) 0%,rgba(22,101,52,0.85) 100%); padding:4rem 2rem; border-radius:20px; color:white; text-align:center; margin-bottom:2rem; }
 .main-header h1 { font-size:2.5rem; font-weight:700; margin:0; text-shadow:2px 2px 4px rgba(0,0,0,0.3); }
 .main-header p { font-size:1.2rem; margin-top:0.5rem; text-shadow:1px 1px 3px rgba(0,0,0,0.3); }
-.receipt-box { background:#fffef8; border:1px solid #e2e0d8; border-radius:4px; padding:0; margin:1rem 0; box-shadow:0 1px 3px rgba(0,0,0,0.08),0 4px 12px rgba(0,0,0,0.06); font-family:'Courier New',monospace; position:relative; }
+.receipt-box { background:#fffef8; border:1px solid #e2e0d8; border-radius:4px; padding:0; margin:1rem 0; box-shadow:0 1px 3px rgba(0,0,0,0.08),0 4px 12px rgba(0,0,0,0.06); font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; position:relative; }
 .receipt-box::before { content:""; display:block; height:6px; background:radial-gradient(circle at 6px 6px,transparent 6px,#fffef8 6px) -6px 0,linear-gradient(#fffef8,#fffef8); background-size:12px 6px,100% 100%; margin-bottom:2px; }
 .receipt-box::after { content:""; display:block; height:6px; background:radial-gradient(circle at 6px 0px,transparent 6px,#fffef8 6px) -6px 0; background-size:12px 6px; margin-top:2px; }
 .receipt-header { background:#14532d; color:white; text-align:center; padding:1rem 1.25rem 0.85rem; }
@@ -56,9 +55,11 @@ st.markdown("""
 .receipt-item { padding:0.75rem 0; border-bottom:1px dashed #ddd8cc; }
 .receipt-item:last-child { border-bottom:none; }
 .receipt-item-title { font-weight:700; color:#14532d; font-size:0.92rem; }
-.receipt-item-row { display:flex; justify-content:space-between; font-size:0.82rem; color:#4b5563; }
-.receipt-item-label { color:#6b7280; min-width:80px; }
-.receipt-item-value { color:#1f2937; text-align:right; word-break:break-word; }
+.receipt-item-row { display:flex; justify-content:flex-start; align-items:baseline; font-size:0.82rem; color:#4b5563; margin-bottom:0.2rem; }
+.receipt-item-label { color:#6b7280; min-width:80px; margin-right:6px; }
+.receipt-item-value { color:#1f2937; text-align:left; word-break:break-word; }
+.receipt-penyerta-list { margin-top:0.2rem; padding-left:0; }
+.receipt-penyerta-list span { display:block; margin-bottom:0.15rem; }
 .receipt-status-badge { font-size:0.72rem; font-weight:700; padding:2px 9px; border-radius:3px; text-transform:uppercase; }
 .status-past { background:#f3f4f6; color:#6b7280; border:1px solid #d1d5db; }
 .status-today { background:#dcfce7; color:#15803d; border:1px solid #86efac; }
@@ -194,20 +195,13 @@ def show_notif(message, notif_type="success"):
     icons = {"success":"✅","error":"❌","info":"ℹ️"}
     st.toast(message, icon=icons.get(notif_type,"ℹ️"))
 
-# ── PARSE CSV GOOGLE SHEET (robust, nama bergelar dengan koma) ──
+# ── PARSE CSV GOOGLE SHEET ──
 def parse_google_sheet_csv(raw_text):
-    """
-    Parser aman untuk CSV dari Google Sheets.
-    Menangani nama dengan koma di gelar (tanpa/dengan quote), dan
-    kegiatan sama tapi lokasi berbeda (TIDAK dideduplikasi).
-    Format kolom: tanggal, lokasi, kegiatan, penyerta
-    """
     import csv as _csv
     lines = raw_text.strip().splitlines()
     if not lines:
         return []
 
-    # Deteksi mapping kolom dari header
     header_parts = [h.strip().lower() for h in lines[0].split(',')]
     col_map = {}
     for i, h in enumerate(header_parts):
@@ -233,15 +227,12 @@ def parse_google_sheet_csv(raw_text):
         if not line:
             continue
 
-        # Coba csv.reader (handle quoted fields dengan benar)
         try:
             row = list(_csv.reader([line]))[0]
         except Exception:
             row = []
 
         if len(row) >= 4:
-            # Jika penyerta tidak di-quote, csv.reader akan memecahnya jadi banyak field
-            # → gabungkan field dari peny_idx sampai akhir dengan koma
             if len(row) > peny_idx + 1:
                 penyerta_val = ', '.join(r.strip() for r in row[peny_idx:])
             else:
@@ -253,7 +244,6 @@ def parse_google_sheet_csv(raw_text):
                 'penyerta': penyerta_val,
             }
         else:
-            # Fallback: split(',', peny_idx) agar koma setelah index ke-3 jadi bagian penyerta
             parts = line.split(',', peny_idx)
             if len(parts) <= peny_idx:
                 continue
@@ -271,12 +261,6 @@ def parse_google_sheet_csv(raw_text):
 
 
 def sync_from_url(csv_url, mode, auth=True):
-    """
-    Ambil CSV dari URL, parse robust, simpan ke DB via API per-record.
-    Menangani duplikat kegiatan sama + lokasi berbeda dengan benar
-    (tidak di-group, setiap baris disimpan individual).
-    Kembalikan (saved, skipped, errors).
-    """
     try:
         resp = requests.get(csv_url, timeout=15)
         resp.raise_for_status()
@@ -288,7 +272,6 @@ def sync_from_url(csv_url, mode, auth=True):
     if not records:
         raise ValueError("Tidak ada data valid di spreadsheet.")
 
-    # Jika mode replace: hapus semua data dulu via bulk atau delete-by-date per bulan
     if mode == 'replace':
         try:
             r_all = api_get("kegiatan/", auth=True)
@@ -299,7 +282,6 @@ def sync_from_url(csv_url, mode, auth=True):
         except Exception:
             pass
 
-    # Ambil data existing untuk deteksi duplikat (tanggal+lokasi+kegiatan)
     existing_set = set()
     if mode == 'append':
         try:
@@ -454,33 +436,21 @@ with st.sidebar:
     st.markdown('<div class="sidebar-puskesmas-sub">Tasikmalaya, Jawa Barat</div>', unsafe_allow_html=True)
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown('<div class="sidebar-menu-label">Navigasi</div>', unsafe_allow_html=True)
-    c1,c2 = st.columns([0.2,0.8])
-    with c1: st.markdown('<div class="sidebar-menu-icon"><i class="fa-solid fa-calendar-days"></i></div>', unsafe_allow_html=True)
-    with c2:
-        if st.button("Jadwal Kegiatan", use_container_width=True):
-            st.session_state.page="user"; st.rerun()
+    if st.button("Jadwal Kegiatan", use_container_width=True):
+        st.session_state.page="user"; st.rerun()
     if not st.session_state.logged_in:
-        c1,c2 = st.columns([0.2,0.8])
-        with c1: st.markdown('<div class="sidebar-menu-icon"><i class="fa-solid fa-lock"></i></div>', unsafe_allow_html=True)
-        with c2:
-            if st.button("Login Admin", use_container_width=True):
-                st.session_state.page="admin_login"; st.rerun()
+        if st.button("Login Admin", use_container_width=True):
+            st.session_state.page="admin_login"; st.rerun()
     else:
         st.markdown(f'<div class="sidebar-user-badge"><i class="fa-solid fa-circle-user"></i> {st.session_state.username}</div>', unsafe_allow_html=True)
-        c1,c2 = st.columns([0.2,0.8])
-        with c1: st.markdown('<div class="sidebar-menu-icon"><i class="fa-solid fa-gauge"></i></div>', unsafe_allow_html=True)
-        with c2:
-            if st.button("Dashboard Admin", use_container_width=True):
-                st.session_state.page="admin_dashboard"; st.rerun()
-        c1,c2 = st.columns([0.2,0.8])
-        with c1: st.markdown('<div class="sidebar-menu-icon"><i class="fa-solid fa-right-from-bracket"></i></div>', unsafe_allow_html=True)
-        with c2:
-            if st.button("Logout", use_container_width=True):
-                try: api_post("logout/",{},auth=True)
-                except: pass
-                for k in ['logged_in','token','username']:
-                    st.session_state[k] = False if k=='logged_in' else None if k=='token' else ''
-                st.session_state.page="user"; st.query_params.clear(); st.rerun()
+        if st.button("Dashboard Admin", use_container_width=True):
+            st.session_state.page="admin_dashboard"; st.rerun()
+        if st.button("Logout", use_container_width=True):
+            try: api_post("logout/",{},auth=True)
+            except: pass
+            for k in ['logged_in','token','username']:
+                st.session_state[k] = False if k=='logged_in' else None if k=='token' else ''
+            st.session_state.page="user"; st.query_params.clear(); st.rerun()
     st.markdown("<hr>", unsafe_allow_html=True)
     try:
         r = requests.get(f"{API_BASE}/jadwal-terdekat/", timeout=3)
@@ -500,7 +470,6 @@ else:
 # USER PAGE
 # ════════════════════════════════════════
 if st.session_state.page=="user":
-    # Notifikasi hari ini / besok
     try:
         today=date.today(); tomorrow=today+timedelta(days=1)
         resp_notif=requests.get(f"{API_BASE}/jadwal-terdekat/", timeout=3)
@@ -516,7 +485,6 @@ if st.session_state.page=="user":
                 st.markdown(f"<div style='background:#eff6ff;border:1px solid #bfdbfe;padding:1rem;border-radius:12px;margin-bottom:0.75rem;'><i class='fa-solid fa-calendar-check'></i> <b>Besok:</b><ul>{items}</ul></div>", unsafe_allow_html=True)
     except: pass
 
-    # Cari Jadwal
     col1,col2=st.columns([2,1])
     with col1:
         st.markdown('<div style="display:flex;align-items:center;gap:8px;margin-bottom:0.5rem"><i class="fa-solid fa-magnifying-glass" style="color:#14532d;"></i><span style="font-size:1.3rem;font-weight:700;color:#14532d;">Cari Jadwal Kegiatan</span></div>', unsafe_allow_html=True)
@@ -530,14 +498,19 @@ if st.session_state.page=="user":
                     tgl_fmt=tanggal.strftime('%A, %d %B %Y')
                     items=""
                     for h in hasil:
-                        peny_items=" &bull; ".join(parse_penyerta(h['penyerta'])) or h['penyerta']
-                        items+=f"<div class='receipt-item'><div class='receipt-item-title'>{h['kegiatan']}</div><div class='receipt-item-row'><span class='receipt-item-label'>Lokasi</span><span class='receipt-item-value'>{h['lokasi']}</span></div><div class='receipt-item-row'><span class='receipt-item-label'>Penyerta</span><span class='receipt-item-value'>{peny_items}</span></div></div>"
+                        peny_list = parse_penyerta(h['penyerta'])
+                        peny_items = ''.join(f'<span>{p}</span>' for p in peny_list) if peny_list else f'<span>{h["penyerta"]}</span>'
+                        items+=f"""<div class="receipt-item">
+                            <div class="receipt-item-title">{h['kegiatan']}</div>
+                            <div class="receipt-item-row"><span class="receipt-item-label">Lokasi</span><span class="receipt-item-value">{h['lokasi']}</span></div>
+                            <div class="receipt-item-row"><span class="receipt-item-label">Penyerta</span><div class="receipt-item-value"><div class="receipt-penyerta-list">{peny_items}</div></div></div>
+                        </div>"""
                     st.markdown(f"<div class='receipt-box'><div class='receipt-header'><h3>Jadwal Kegiatan</h3><p>{tgl_fmt}</p></div><div class='receipt-body'>{items}</div><div class='receipt-footer'><div class='receipt-barcode'>|||||||||||||||||||||||</div>Puskesmas Sangkali</div></div>", unsafe_allow_html=True)
                 else: st.warning("Tidak ada kegiatan.")
     with col2:
         st.markdown('<div class="data-card"><div style="display:flex;align-items:center;gap:6px;margin-bottom:0.5rem"><i class="fa-solid fa-circle-info" style="color:#14532d;"></i><span style="font-weight:700;color:#14532d;">Informasi</span></div><ul style="font-size:0.88rem;line-height:1.8;"><li>Datang 15 menit lebih awal</li><li>Bawa KMS/BPJS</li><li>Gunakan masker</li></ul></div>', unsafe_allow_html=True)
 
-    # Riwayat Kehadiran
+    # ── Riwayat Kehadiran (style receipt) ──
     st.markdown("---")
     st.markdown('<div style="display:flex;align-items:center;gap:8px;margin-bottom:0.5rem"><i class="fa-solid fa-clock-rotate-left" style="color:#14532d;"></i><span style="font-size:1.2rem;font-weight:700;color:#14532d;">Riwayat Kehadiran Saya</span></div>', unsafe_allow_html=True)
     cf1,cf2,cf3=st.columns([2,2,1])
@@ -548,7 +521,6 @@ if st.session_state.page=="user":
     if st.button("Tampilkan Riwayat"):
         try:
             raw_data=None
-            # Coba dengan auth jika login, lalu tanpa auth sebagai fallback
             for use_auth in ([True,False] if st.session_state.logged_in else [False]):
                 try:
                     r=api_get("kegiatan/", auth=use_auth)
@@ -557,7 +529,7 @@ if st.session_state.page=="user":
                 except: continue
 
             if raw_data is None:
-                st.warning("Gagal memuat data. Pastikan server berjalan dan endpoint /api/kegiatan/ dapat diakses.")
+                st.warning("Gagal memuat data. Pastikan server berjalan.")
             elif not raw_data:
                 st.info("Belum ada data kegiatan di sistem.")
             else:
@@ -573,31 +545,49 @@ if st.session_state.page=="user":
                 if df_filtered.empty:
                     st.info(f"Tidak ada kegiatan ditemukan untuk {nama_riwayat}.")
                 else:
-                    st.success(f"Ditemukan {len(df_filtered)} kegiatan")
+                    items=""
                     for _,row in df_filtered.iterrows():
                         id_keg=row.get('id')
                         status=st.session_state.user_history_status.get(id_keg,'belum')
-                        if status=='hadir': cls="history-item-hadir"; badge="Hadir"; bcls="history-badge-hadir"
-                        elif status=='tidak_hadir': cls="history-item-tidak"; badge="Tidak Hadir"; bcls="history-badge-tidak"
-                        else: cls="history-item-netral"; badge="Belum"; bcls="history-badge-netral"
-                        st.markdown(
-                            f"<div class='history-item {cls}'>"
-                            f"<b>{row['tanggal_dt'].strftime('%A, %d %B %Y')}</b> — {row['kegiatan']}<br>"
-                            f"<small>{row['lokasi']}</small><br>"
-                            f"<span class='{bcls}'>{badge}</span></div>",
-                            unsafe_allow_html=True)
+                        if status=='hadir':
+                            badge_html = '<span class="history-badge-hadir">Hadir</span>'
+                        elif status=='tidak_hadir':
+                            badge_html = '<span class="history-badge-tidak">Tidak Hadir</span>'
+                        else:
+                            badge_html = '<span class="history-badge-netral">Belum Ditandai</span>'
+
+                        peny_list = parse_penyerta(str(row['penyerta']))
+                        peny_items = ''.join(f'<span>{p}</span>' for p in peny_list) if peny_list else f'<span>{str(row["penyerta"])}</span>'
+
+                        items+=f"""<div class="receipt-item">
+                            <div class="receipt-item-title">{row['kegiatan']} {badge_html}</div>
+                            <div class="receipt-item-row"><span class="receipt-item-label">Tanggal</span><span class="receipt-item-value">{row['tanggal_dt'].strftime('%A, %d %B %Y')}</span></div>
+                            <div class="receipt-item-row"><span class="receipt-item-label">Lokasi</span><span class="receipt-item-value">{row['lokasi']}</span></div>
+                            <div class="receipt-item-row"><span class="receipt-item-label">Penyerta</span><div class="receipt-item-value"><div class="receipt-penyerta-list">{peny_items}</div></div></div>
+                        </div>"""
+
+                    st.markdown(f"""<div class="receipt-box">
+                        <div class="receipt-header"><h3>Riwayat Kehadiran</h3><p>{nama_riwayat}</p></div>
+                        <div class="receipt-body">{items}</div>
+                        <div class="receipt-footer">
+                            <div class="receipt-barcode">|||||||||||||||||||||||</div>
+                            {len(df_filtered)} kegiatan
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+
+                    for _,row in df_filtered.iterrows():
                         if row['tanggal_dt'].date()<=date.today():
                             ca,cb,_=st.columns([1,1,2])
                             with ca:
-                                if st.button("✅ Hadir", key=f"hadir_{id_keg}"):
-                                    st.session_state.user_history_status[id_keg]='hadir'; st.rerun()
+                                if st.button("Hadir", key=f"hadir_{row.get('id')}"):
+                                    st.session_state.user_history_status[row.get('id')]='hadir'; st.rerun()
                             with cb:
-                                if st.button("❌ Tidak", key=f"tidak_{id_keg}"):
-                                    st.session_state.user_history_status[id_keg]='tidak_hadir'; st.rerun()
+                                if st.button("Tidak", key=f"tidak_{row.get('id')}"):
+                                    st.session_state.user_history_status[row.get('id')]='tidak_hadir'; st.rerun()
         except requests.exceptions.ConnectionError:
-            st.error("Tidak dapat terhubung ke server. Pastikan server Django sudah berjalan.")
+            st.error("Tidak dapat terhubung ke server.")
         except requests.exceptions.Timeout:
-            st.error("Koneksi timeout. Server tidak merespons.")
+            st.error("Koneksi timeout.")
         except Exception as e:
             st.error(f"Terjadi kesalahan: {str(e)}")
 
@@ -670,7 +660,7 @@ elif st.session_state.page=="admin_dashboard":
                     if resp.status_code==201: st.session_state.notif="Data berhasil disimpan!"; st.rerun()
                     else: show_notif(f"Gagal: {resp.text}","error")
 
-        # ── Tab 2: Google Sheet ──
+    # ── Tab 2: Google Sheet ──
     with tab2:
         st.markdown('<h4><i class="fa-solid fa-cloud-arrow-up"></i> Sync Google Spreadsheet</h4>', unsafe_allow_html=True)
         st.info("Kolom yang dibutuhkan: **tanggal**, **lokasi**, **kegiatan**, **penyerta**  \n"
@@ -678,16 +668,13 @@ elif st.session_state.page=="admin_dashboard":
         st.warning("Mode **Ganti semua** akan menghapus seluruh data lama sebelum mengisi ulang. "
                    "Gunakan **Tambahkan** jika hanya ingin menambah data baru.")
 
-        # ── Fungsi normalisasi tanggal (DD/MM/YYYY → YYYY-MM-DD) ──
         def normalize_date(date_str):
             if not date_str:
                 return None
             try:
-                # Dayfirst=True untuk mendukung format Indonesia
                 parsed = pd.to_datetime(date_str, dayfirst=True, errors='coerce')
                 if pd.notna(parsed):
                     return parsed.strftime('%Y-%m-%d')
-                # Coba tanpa dayfirst
                 parsed = pd.to_datetime(date_str, dayfirst=False, errors='coerce')
                 if pd.notna(parsed):
                     return parsed.strftime('%Y-%m-%d')
@@ -695,14 +682,11 @@ elif st.session_state.page=="admin_dashboard":
                 pass
             return date_str
 
-        # ── Parser CSV yang sudah diperbaiki ──
         def parse_google_sheet_csv(raw_text):
             import csv as _csv
             lines = raw_text.strip().splitlines()
             if not lines:
                 return []
-
-            # Deteksi mapping kolom dari header
             header_parts = [h.strip().lower() for h in lines[0].split(',')]
             col_map = {}
             for i, h in enumerate(header_parts):
@@ -714,25 +698,20 @@ elif st.session_state.page=="admin_dashboard":
                     col_map['kegiatan'] = i
                 elif 'penyerta' in h or 'pelaksana' in h or 'peserta' in h or 'petugas' in h:
                     col_map['penyerta'] = i
-
             required = ['tanggal', 'lokasi', 'kegiatan', 'penyerta']
             missing = [k for k in required if k not in col_map]
             if missing:
                 raise ValueError(f"Kolom tidak ditemukan: {missing}. Header terdeteksi: {header_parts}")
-
             peny_idx = col_map['penyerta']
             results = []
-
             for line in lines[1:]:
                 line = line.strip()
                 if not line:
                     continue
-
                 try:
                     row = list(_csv.reader([line]))[0]
                 except Exception:
                     row = []
-
                 if len(row) >= 4:
                     if len(row) > peny_idx + 1:
                         penyerta_val = ', '.join(r.strip() for r in row[peny_idx:])
@@ -749,10 +728,7 @@ elif st.session_state.page=="admin_dashboard":
                     lok_val = parts[col_map.get('lokasi', 1)].strip()
                     keg_val = parts[col_map.get('kegiatan', 2)].strip()
                     penyerta_val = parts[peny_idx].strip().strip('"')
-
-                # Normalisasi tanggal ke YYYY-MM-DD
                 tgl_normal = normalize_date(tgl_val)
-
                 if tgl_normal and keg_val:
                     results.append({
                         'tanggal':  tgl_normal,
@@ -760,10 +736,8 @@ elif st.session_state.page=="admin_dashboard":
                         'kegiatan': keg_val,
                         'penyerta': penyerta_val,
                     })
-
             return results
 
-        # ── Fungsi sync ──
         def sync_from_url(csv_url, mode, auth=True):
             try:
                 resp = requests.get(csv_url, timeout=15)
@@ -771,11 +745,9 @@ elif st.session_state.page=="admin_dashboard":
                 raw = resp.text
             except Exception as e:
                 raise ValueError(f"Gagal mengunduh CSV: {e}")
-
             records = parse_google_sheet_csv(raw)
             if not records:
                 raise ValueError("Tidak ada data valid di spreadsheet.")
-
             if mode == 'replace':
                 try:
                     r_all = api_get("kegiatan/", auth=True)
@@ -785,7 +757,6 @@ elif st.session_state.page=="admin_dashboard":
                             api_post("kegiatan/bulk-delete/", {"ids": ids_all}, auth=True)
                 except Exception:
                     pass
-
             existing_set = set()
             if mode == 'append':
                 try:
@@ -795,7 +766,6 @@ elif st.session_state.page=="admin_dashboard":
                             existing_set.add((item['tanggal'], item['lokasi'], item['kegiatan']))
                 except Exception:
                     pass
-
             saved = skipped = errors = 0
             for rec in records:
                 key = (rec['tanggal'], rec['lokasi'], rec['kegiatan'])
@@ -811,10 +781,8 @@ elif st.session_state.page=="admin_dashboard":
                         errors += 1
                 except Exception:
                     errors += 1
-
             return saved, skipped, errors
 
-        # ── UI ──
         if st.session_state.last_csv_url:
             url_display = st.session_state.last_csv_url
             short_url = url_display if len(url_display) <= 60 else url_display[:57] + "..."
@@ -1097,7 +1065,7 @@ elif st.session_state.page=="admin_dashboard":
             else: show_notif("Gagal memuat data","error")
         except Exception as e: st.error(f"Error: {e}")
 
-    # ── Tab 5: History ──
+            # ── Tab 5: History ──
     with tab5:
         st.subheader("History Kegiatan")
         st.caption("Riwayat kegiatan yang sudah lewat dan akan datang")
@@ -1134,15 +1102,17 @@ elif st.session_state.page=="admin_dashboard":
                             elif td==today+timedelta(days=1): sts="Besok"; badge="status-soon"
                             else: sts="Akan Datang"; badge="status-future"
                             tgl_fmt=pd.to_datetime(row['tanggal']).strftime('%A, %d %B %Y')
-                            peny_disp=str(row['penyerta'])[:120]+("..." if len(str(row['penyerta']))>120 else "")
+                            peny_list = parse_penyerta(str(row['penyerta']))
+                            peny_disp = ''.join(f'<span>{p}</span>' for p in peny_list) if peny_list else f'<span>{str(row["penyerta"])[:120]}</span>'
                             items+=f"""<div class="receipt-item">
                                 <div class="receipt-item-title">{row['kegiatan']} <span class="receipt-status-badge {badge}">{sts}</span></div>
                                 <div class="receipt-item-row"><span class="receipt-item-label">Tanggal</span><span class="receipt-item-value">{tgl_fmt}</span></div>
                                 <div class="receipt-item-row"><span class="receipt-item-label">Lokasi</span><span class="receipt-item-value">{row['lokasi']}</span></div>
-                                <div class="receipt-item-row"><span class="receipt-item-label">Penyerta</span><span class="receipt-item-value">{peny_disp}</span></div>
+                                <div class="receipt-item-row"><span class="receipt-item-label">Penyerta</span><div class="receipt-item-value"><div class="receipt-penyerta-list">{peny_disp}</div></div></div>
                             </div>"""
+                        # Tampilkan receipt TANPA teks filter di bawah judul
                         st.markdown(f"""<div class="receipt-box">
-                            <div class="receipt-header"><h3>History Kegiatan</h3><p>{filter_status} &mdash; {filter_bulan}</p></div>
+                            <div class="receipt-header"><h3>History Kegiatan</h3></div>
                             <div class="receipt-body">{items}</div>
                             <div class="receipt-footer">
                                 <div class="receipt-barcode">|||||||||||||||||||||||</div>
@@ -1159,7 +1129,7 @@ elif st.session_state.page=="admin_dashboard":
             else: show_notif("Gagal memuat data","error")
         except Exception as e: st.error(f"Error: {e}")
 
-        # Hapus Massal - FIXED: tidak pakai nested st.button
+        # Hapus Massal
         st.markdown("---")
         st.subheader("Hapus Massal")
         if not st.session_state.confirm_hapus_massal:
@@ -1189,7 +1159,7 @@ elif st.session_state.page=="admin_dashboard":
             with cn2:
                 if st.button("Batal", key="confirm_batal_hapus"):
                     st.session_state.confirm_hapus_massal=False; st.rerun()
-
+                                
     # ── Tab 6: Randomize ──
     with tab6:
         st.subheader("Randomize Jadwal Bulanan (Dalam Gedung)")
