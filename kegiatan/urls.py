@@ -14,5 +14,8 @@ urlpatterns = [
     path('search-user/', views.search_user),
     path('jadwal-terdekat/', views.jadwal_terdekat),
     path('verify-token/', views.verify_token),
-       path('delete-by-date/', views.delete_kegiatan_by_date),
+    path('delete-by-date/', views.delete_kegiatan_by_date),
+    path('randomize-dalam-gedung/', views.randomize_dalam_gedung, name='randomize-dalam-gedung'),
+    path('hari-libur/', views.hari_libur_list, name='hari-libur-list'),
+    path('hari-libur/<int:pk>/', views.hari_libur_detail, name='hari-libur-detail'),
 ]

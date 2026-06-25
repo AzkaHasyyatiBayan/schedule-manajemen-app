@@ -8,8 +8,8 @@ from rest_framework.throttling import AnonRateThrottle
 from django.contrib.auth import authenticate
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-from .models import Kegiatan
-from .serializers import KegiatanSerializer
+from .models import Kegiatan, HariLibur
+from .serializers import KegiatanSerializer, HariLiburSerializer
 from .utils import capitalisasi_judul
 import pandas as pd
 import requests
@@ -23,7 +23,7 @@ class LoginRateThrottle(AnonRateThrottle):
 
 
 # ─── ViewSet CRUD (hanya admin dengan token) ─────────────────────────────────
-@method_decorator(csrf_exempt, name='dispatch')  # tetap nonaktifkan CSRF untuk viewset
+@method_decorator(csrf_exempt, name='dispatch')
 class KegiatanViewSet(viewsets.ModelViewSet):
     queryset = Kegiatan.objects.all().order_by('-tanggal')
     serializer_class = KegiatanSerializer
@@ -38,7 +38,6 @@ class KegiatanViewSet(viewsets.ModelViewSet):
         nama = serializer.validated_data.get('kegiatan', '')
         serializer.save(kegiatan=capitalisasi_judul(nama))
 
-    # Hapus bulk (POST karena DELETE tidak support body di beberapa server)
     @action(detail=False, methods=['post'], url_path='bulk-delete')
     def bulk_delete(self, request):
         ids = request.data.get('ids', [])
@@ -48,7 +47,7 @@ class KegiatanViewSet(viewsets.ModelViewSet):
         return Response({'message': f'{deleted} data dihapus.'})
 
 
-# ─── Login → kembalikan token ────────────────────────────────────────────────
+# ─── Login ───────────────────────────────────────────────────────────────────
 @api_view(['POST'])
 @permission_classes([AllowAny])
 @throttle_classes([LoginRateThrottle])
@@ -81,7 +80,7 @@ def login_view(request):
     )
 
 
-# ─── Logout → hapus token ────────────────────────────────────────────────────
+# ─── Logout ──────────────────────────────────────────────────────────────────
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def logout_view(request):
@@ -92,18 +91,17 @@ def logout_view(request):
     return Response({'message': 'Logout berhasil'})
 
 
-# ─── Sync Google Sheets ──────────────────────────────────────────────────────
+# ─── Sync Google Sheets (UPDATED - support kategori) ────────────────────────
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def sync_google_sheets(request):
     url = request.data.get('csv_url', '').strip()
-    mode = request.data.get('mode', 'append')  # default append untuk jaga data lama
+    mode = request.data.get('mode', 'append')
 
     if not url:
         return Response({'error': 'Parameter csv_url diperlukan'}, status=400)
 
     try:
-        # Normalisasi URL Google Sheets ke format CSV
         if '/spreadsheets/d/e/' in url:
             csv_url = url.split('?')[0] + '?output=csv'
         elif '/spreadsheets/d/' in url:
@@ -142,8 +140,17 @@ def sync_google_sheets(request):
                 keg = capitalisasi_judul(str(row['kegiatan']).strip())
                 peny = str(row['penyerta']).strip()
 
+                # Support kategori (opsional)
+                kat = str(row.get('kategori', 'luar_gedung')).strip().lower()
+                if kat not in ['dalam_gedung', 'luar_gedung']:
+                    kat = 'luar_gedung'
+
+                # Support sub_kategori (opsional)
+                sub_kat = str(row.get('sub_kategori', 'lainnya')).strip().lower()
+                if sub_kat not in ['posyandu', 'bok', 'sekolah', 'kunjungan_lapangan', 'inspeksi', 'rapat', 'lainnya']:
+                    sub_kat = 'lainnya'
+
                 if mode == 'append':
-                    # Cek duplikat
                     if Kegiatan.objects.filter(tanggal=tgl, lokasi=lok, kegiatan=keg).exists():
                         skipped += 1
                         continue
@@ -152,7 +159,9 @@ def sync_google_sheets(request):
                     tanggal=tgl,
                     lokasi=lok,
                     kegiatan=keg,
-                    penyerta=peny
+                    penyerta=peny,
+                    kategori=kat,
+                    sub_kategori=sub_kat
                 )
                 created += 1
             except Exception as e:
@@ -181,9 +190,9 @@ def sync_google_sheets(request):
 @permission_classes([IsAuthenticated])
 def search_admin(request):
     qs = Kegiatan.objects.all().order_by('-tanggal')
-    tgl  = request.query_params.get('tanggal')
-    lok  = request.query_params.get('lokasi')
-    keg  = request.query_params.get('kegiatan')
+    tgl = request.query_params.get('tanggal')
+    lok = request.query_params.get('lokasi')
+    keg = request.query_params.get('kegiatan')
     peny = request.query_params.get('penyerta')
 
     if tgl:
@@ -199,12 +208,12 @@ def search_admin(request):
     return Response(serializer.data)
 
 
-# ─── Pencarian User Umum ────────────────────────────────────────────────────
+# ─── Pencarian User Umum (UPDATED - include kategori) ───────────────────────
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def search_user(request):
     qs = Kegiatan.objects.all()
-    tgl  = request.query_params.get('tanggal')
+    tgl = request.query_params.get('tanggal')
     nama = request.query_params.get('nama')
 
     if tgl:
@@ -217,11 +226,13 @@ def search_user(request):
         'lokasi': k.lokasi,
         'kegiatan': k.kegiatan,
         'penyerta': k.penyerta,
+        'kategori': k.kategori,
+        'sub_kategori': k.sub_kategori,
     } for k in qs]
     return Response(data)
 
 
-# ─── Jadwal Terdekat (publik) ────────────────────────────────────────────────
+# ─── Jadwal Terdekat (UPDATED - include kategori) ───────────────────────────
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def jadwal_terdekat(request):
@@ -233,6 +244,8 @@ def jadwal_terdekat(request):
         'lokasi': k.lokasi,
         'kegiatan': k.kegiatan,
         'penyerta': k.penyerta,
+        'kategori': k.kategori,
+        'sub_kategori': k.sub_kategori,
     } for k in qs]
     return Response(data)
 
@@ -245,7 +258,7 @@ def verify_token(request):
 
 
 # ─── Hapus per Bulan/Tahun ──────────────────────────────────────────────────
-@api_view(['DELETE', 'POST'])  # mendukung kedua method untuk kemudahan
+@api_view(['DELETE', 'POST'])
 @permission_classes([IsAuthenticated])
 def delete_kegiatan_by_date(request):
     month = request.data.get('month') or request.query_params.get('month')
@@ -260,3 +273,102 @@ def delete_kegiatan_by_date(request):
 
     deleted, _ = Kegiatan.objects.filter(tanggal__month=month, tanggal__year=year).delete()
     return Response({'message': f'{deleted} data dihapus untuk {month}/{year}.'})
+
+
+# ─── Randomize Dalam Gedung (NEW) ───────────────────────────────────────────
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def randomize_dalam_gedung(request):
+    from .randomize_logic import generate_jadwal_dalam_gedung
+
+    bulan = request.data.get('bulan')
+    tahun = request.data.get('tahun')
+    minggu = request.data.get('minggu')
+    loka_karya = request.data.get('loka_karya', False)
+
+    if not all([bulan, tahun, minggu]):
+        return Response({'error': 'bulan, tahun, dan minggu diperlukan'}, status=400)
+
+    try:
+        bulan = int(bulan)
+        tahun = int(tahun)
+        minggu = int(minggu)
+    except ValueError:
+        return Response({'error': 'bulan, tahun, minggu harus angka'}, status=400)
+
+    jadwal_list, skipped = generate_jadwal_dalam_gedung(bulan, tahun, minggu, loka_karya)
+
+    if not jadwal_list:
+        return Response({'error': 'Gagal generate jadwal', 'skipped': skipped}, status=400)
+
+    preview = request.data.get('preview', True)
+
+    if preview:
+        return Response({
+            'message': f'Berhasil generate {len(jadwal_list)} jadwal',
+            'jadwal': jadwal_list,
+            'skipped': skipped
+        })
+    else:
+        saved = 0
+        for j in jadwal_list:
+            if not Kegiatan.objects.filter(
+                tanggal=j['tanggal'],
+                lokasi=j['lokasi'],
+                kegiatan=j['kegiatan']
+            ).exists():
+                Kegiatan.objects.create(
+                    tanggal=j['tanggal'],
+                    lokasi=j['lokasi'],
+                    kegiatan=j['kegiatan'],
+                    penyerta=j['penyerta'],
+                    kategori=j['kategori'],
+                    is_auto_generated=True
+                )
+                saved += 1
+
+        return Response({
+            'message': f'Berhasil menyimpan {saved} jadwal',
+            'skipped': skipped
+        })
+
+
+# ─── Hari Libur CRUD (NEW) ──────────────────────────────────────────────────
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def hari_libur_list(request):
+    if request.method == 'GET':
+        libur = HariLibur.objects.all().order_by('tanggal')
+        serializer = HariLiburSerializer(libur, many=True)
+        return Response(serializer.data)
+
+    elif request.method == 'POST':
+        serializer = HariLiburSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=201)
+        return Response(serializer.errors, status=400)
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def hari_libur_detail(request, pk):
+    try:
+        libur = HariLibur.objects.get(pk=pk)
+    except HariLibur.DoesNotExist:
+        return Response(status=404)
+
+    if request.method == 'GET':
+        serializer = HariLiburSerializer(libur)
+        return Response(serializer.data)
+
+    elif request.method == 'PUT':
+        serializer = HariLiburSerializer(libur, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+
+    elif request.method == 'DELETE':
+        libur.delete()
+        return Response(status=204)
