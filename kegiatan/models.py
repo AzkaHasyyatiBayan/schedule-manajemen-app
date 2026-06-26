@@ -16,6 +16,12 @@ class Kegiatan(models.Model):
         ('lainnya', 'Lainnya'),
     ]
     
+    SOURCE_CHOICES = [
+        ('google_sheet', 'Google Sheet'),
+        ('manual', 'Input Manual'),
+        ('randomize', 'Randomize'),
+    ]
+    
     tanggal = models.DateField()
     lokasi = models.CharField(max_length=200)
     kegiatan = models.CharField(max_length=200)
@@ -23,8 +29,9 @@ class Kegiatan(models.Model):
     kategori = models.CharField(max_length=15, choices=KATEGORI_CHOICES, default='luar_gedung')
     sub_kategori = models.CharField(max_length=20, choices=SUB_KATEGORI_CHOICES, default='lainnya', blank=True)
     
-    # Field untuk track randomize
+    # Field untuk track sumber data
     is_auto_generated = models.BooleanField(default=False)
+    source = models.CharField(max_length=15, choices=SOURCE_CHOICES, default='manual')
 
     def __str__(self):
         return f"{self.tanggal} - {self.kegiatan}"

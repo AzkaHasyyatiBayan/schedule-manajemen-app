@@ -4,7 +4,7 @@ from .models import Kegiatan, HariLibur
 class KegiatanSerializer(serializers.ModelSerializer):
     class Meta:
         model = Kegiatan
-        fields = ['id', 'tanggal', 'lokasi', 'kegiatan', 'penyerta', 'kategori', 'sub_kategori', 'is_auto_generated']
+        fields = ['id', 'tanggal', 'lokasi', 'kegiatan', 'penyerta', 'kategori', 'sub_kategori', 'is_auto_generated', 'source']
 
 class HariLiburSerializer(serializers.ModelSerializer):
     class Meta:

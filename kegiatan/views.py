@@ -13,6 +13,7 @@ from .serializers import KegiatanSerializer, HariLiburSerializer
 from .utils import capitalisasi_judul
 import pandas as pd
 import requests
+import re
 from io import StringIO
 from datetime import datetime
 
@@ -32,7 +33,10 @@ class KegiatanViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         nama = serializer.validated_data.get('kegiatan', '')
-        serializer.save(kegiatan=capitalisasi_judul(nama))
+        serializer.save(
+            kegiatan=capitalisasi_judul(nama),
+            source='manual'  # Set source untuk input manual
+        )
 
     def perform_update(self, serializer):
         nama = serializer.validated_data.get('kegiatan', '')
@@ -91,7 +95,61 @@ def logout_view(request):
     return Response({'message': 'Logout berhasil'})
 
 
-# ─── Sync Google Sheets (UPDATED - support kategori) ────────────────────────
+# ─── Helper Functions untuk Pivot Table Parser ──────────────────────────────
+BULAN_MAP = {
+    'Januari': 1, 'Februari': 2, 'Maret': 3, 'April': 4,
+    'Mei': 5, 'Juni': 6, 'Juli': 7, 'Agustus': 8,
+    'September': 9, 'Oktober': 10, 'November': 11, 'Desember': 12
+}
+
+def parse_tanggal_indo(text):
+    """Parse tanggal format Indonesia: 'Selasa, 02 Juni 2026' -> '2026-06-02'"""
+    text = str(text).strip()
+    # Hapus nama hari
+    text = re.sub(r'^(Senin|Selasa|Rabu|Kamis|Jumat|Sabtu|Minggu),?\s*', '', text, flags=re.IGNORECASE)
+    # Parse tanggal
+    match = re.match(r'(\d{1,2})\s+(\w+)\s+(\d{4})', text)
+    if match:
+        day = int(match.group(1))
+        month_name = match.group(2)
+        year = int(match.group(3))
+        month = BULAN_MAP.get(month_name)
+        if month:
+            try:
+                return datetime(year, month, day).strftime('%Y-%m-%d')
+            except:
+                pass
+    return None
+
+def split_names(text):
+    """Split multiple nama dalam satu sel menjadi list"""
+    if not text or str(text).strip().lower() in ['nan', 'none', '']:
+        return []
+    
+    text = str(text).strip()
+    
+    # Split dengan semicolon
+    if ';' in text:
+        return [n.strip() for n in text.split(';') if n.strip()]
+    
+    # Split dengan newline
+    if '\n' in text:
+        return [n.strip() for n in text.split('\n') if n.strip()]
+    
+    # Normalize whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    # Split berdasarkan pola gelar
+    pattern = r'((?:dr\.?|drg\.?)?\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s*,\s*)?(?:S\.Tr\.Keb|S\.Kep\.?\s*,?\s*Ners|AMK|SKM|A\.Md\.Keb|A\.Md\.KL|S\.Gz|A\.Md\.Gz|S\.Farm\.?\s*,?\s*Apt|S\.E|S\.T|AMd\.?\s*RMIK|S\.ST|S\.Tr\.Kes|A\.Md\.AK|A\.Md\.Farm|A\.Md\.Kep|Amd\.?\s*Kep|Am\.?\s*Keb|dr\.?|drg\.?)?)'
+    matches = re.findall(pattern, text)
+    if len(matches) > 1:
+        return [m.strip() for m in matches if m.strip()]
+    
+    # Fallback: return as is
+    return [text] if text else []
+
+
+# ─── Sync Google Sheets (UPDATED - support pivot & flat format + smart replace) ──
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def sync_google_sheets(request):
@@ -102,6 +160,7 @@ def sync_google_sheets(request):
         return Response({'error': 'Parameter csv_url diperlukan'}, status=400)
 
     try:
+        # 1. Download CSV
         if '/spreadsheets/d/e/' in url:
             csv_url = url.split('?')[0] + '?output=csv'
         elif '/spreadsheets/d/' in url:
@@ -114,68 +173,20 @@ def sync_google_sheets(request):
         resp = requests.get(csv_url, headers=headers, timeout=15)
         resp.raise_for_status()
 
-        df = pd.read_csv(StringIO(resp.text))
-        df.columns = [c.lower().strip() for c in df.columns]
-
-        required = ['tanggal', 'lokasi', 'kegiatan', 'penyerta']
-        missing = [col for col in required if col not in df.columns]
-        if missing:
-            return Response(
-                {'error': f'Kolom tidak ditemukan: {missing}. Kolom yang ada: {list(df.columns)}'},
-                status=400
-            )
-
-        df = df.dropna(subset=['tanggal', 'lokasi'])
-
-        if mode == 'replace':
-            Kegiatan.objects.all().delete()
-
-        created = 0
-        skipped = 0
-        errors = []
-        for i, row in df.iterrows():
-            try:
-                tgl = pd.to_datetime(row['tanggal']).date()
-                lok = str(row['lokasi']).strip()
-                keg = capitalisasi_judul(str(row['kegiatan']).strip())
-                peny = str(row['penyerta']).strip()
-
-                # Support kategori (opsional)
-                kat = str(row.get('kategori', 'luar_gedung')).strip().lower()
-                if kat not in ['dalam_gedung', 'luar_gedung']:
-                    kat = 'luar_gedung'
-
-                # Support sub_kategori (opsional)
-                sub_kat = str(row.get('sub_kategori', 'lainnya')).strip().lower()
-                if sub_kat not in ['posyandu', 'bok', 'sekolah', 'kunjungan_lapangan', 'inspeksi', 'rapat', 'lainnya']:
-                    sub_kat = 'lainnya'
-
-                if mode == 'append':
-                    if Kegiatan.objects.filter(tanggal=tgl, lokasi=lok, kegiatan=keg).exists():
-                        skipped += 1
-                        continue
-
-                Kegiatan.objects.create(
-                    tanggal=tgl,
-                    lokasi=lok,
-                    kegiatan=keg,
-                    penyerta=peny,
-                    kategori=kat,
-                    sub_kategori=sub_kat
-                )
-                created += 1
-            except Exception as e:
-                errors.append(f'Baris {i+2}: {e}')
-
-        msg = f'{created} data baru diimpor.'
-        if mode == 'replace':
-            msg = 'Data lama dihapus. ' + msg
-        elif skipped > 0:
-            msg += f' {skipped} data sudah ada dan dilewati.'
-        result = {'message': msg}
-        if errors:
-            result['peringatan'] = errors
-        return Response(result)
+        # 2. Deteksi format: Flat atau Pivot
+        df_check = pd.read_csv(StringIO(resp.text))
+        df_check.columns = [c.lower().strip() for c in df_check.columns]
+        
+        # Cek apakah format flat (ada kolom tanggal, lokasi, kegiatan, penyerta)
+        is_flat_format = all(col in df_check.columns for col in ['tanggal', 'lokasi', 'kegiatan', 'penyerta'])
+        
+        if is_flat_format:
+            # ─── FORMAT FLAT ──────────────────────────────────────────────
+            return _process_flat_format(df_check, mode)
+        else:
+            # ─── FORMAT PIVOT ─────────────────────────────────────────────
+            df_pivot = pd.read_csv(StringIO(resp.text), header=None)
+            return _process_pivot_format(df_pivot, mode)
 
     except requests.exceptions.Timeout:
         return Response({'error': 'Timeout saat mengambil data dari Google Sheets'}, status=504)
@@ -183,6 +194,211 @@ def sync_google_sheets(request):
         return Response({'error': f'Gagal mengambil spreadsheet: {e}'}, status=400)
     except Exception as e:
         return Response({'error': str(e)}, status=500)
+
+
+def _process_flat_format(df, mode):
+    """Proses format flat (tabel biasa dengan kolom tanggal, lokasi, kegiatan, penyerta)"""
+    df = df.dropna(subset=['tanggal', 'lokasi'])
+
+    # Smart Replace: hanya hapus data dengan source='google_sheet'
+    if mode == 'replace':
+        deleted_count, _ = Kegiatan.objects.filter(source='google_sheet').delete()
+    
+    created = 0
+    skipped = 0
+    errors = []
+    
+    for i, row in df.iterrows():
+        try:
+            tgl = pd.to_datetime(row['tanggal']).date()
+            lok = str(row['lokasi']).strip()
+            keg = capitalisasi_judul(str(row['kegiatan']).strip())
+            peny = str(row['penyerta']).strip()
+
+            # Support kategori (opsional)
+            kat = str(row.get('kategori', 'luar_gedung')).strip().lower()
+            if kat not in ['dalam_gedung', 'luar_gedung']:
+                kat = 'luar_gedung'
+
+            # Support sub_kategori (opsional)
+            sub_kat = str(row.get('sub_kategori', 'lainnya')).strip().lower()
+            if sub_kat not in ['posyandu', 'bok', 'sekolah', 'kunjungan_lapangan', 'inspeksi', 'rapat', 'lainnya']:
+                sub_kat = 'lainnya'
+
+            if mode == 'append':
+                if Kegiatan.objects.filter(tanggal=tgl, lokasi=lok, kegiatan=keg).exists():
+                    skipped += 1
+                    continue
+
+            Kegiatan.objects.create(
+                tanggal=tgl,
+                lokasi=lok,
+                kegiatan=keg,
+                penyerta=peny,
+                kategori=kat,
+                sub_kategori=sub_kat,
+                source='google_sheet'  # Set source
+            )
+            created += 1
+        except Exception as e:
+            errors.append(f'Baris {i+2}: {e}')
+
+    msg = f'{created} data baru diimpor.'
+    if mode == 'replace':
+        msg = f'Data dari Google Sheet lama dihapus. {msg}'
+    elif skipped > 0:
+        msg += f' {skipped} data sudah ada dan dilewati.'
+    
+    result = {'message': msg, 'format': 'flat'}
+    if errors:
+        result['peringatan'] = errors[:10]
+    return Response(result)
+
+
+def _process_pivot_format(df, mode):
+    """Proses format pivot (tabel mingguan dengan header tanggal)"""
+    if df.empty:
+        return Response({'error': 'File CSV kosong'}, status=400)
+
+    # Smart Replace: hanya hapus data dengan source='google_sheet'
+    if mode == 'replace':
+        deleted_count, _ = Kegiatan.objects.filter(source='google_sheet').delete()
+
+    created = 0
+    skipped = 0
+    errors = []
+    
+    current_kategori = 'dalam_gedung'
+    current_lokasi = 'Dalam Gedung'
+    
+    # Cari baris header tanggal
+    header_row_idx = -1
+    date_columns = {}
+    
+    for idx, row in df.iterrows():
+        # Deteksi Section Header
+        val_a = str(row[0]).strip().upper()
+        if 'RUANG PELAYANAN' in val_a or 'DALAM GEDUNG' in val_a:
+            current_kategori = 'dalam_gedung'
+            current_lokasi = 'Dalam Gedung'
+            continue
+        elif 'LUAR GEDUNG' in val_a:
+            current_kategori = 'luar_gedung'
+            current_lokasi = 'Luar Gedung'
+            continue
+            
+        # Deteksi Baris Tanggal (Header)
+        is_header = False
+        for col_idx, cell in enumerate(row):
+            cell_str = str(cell).strip()
+            parsed_date = parse_tanggal_indo(cell_str)
+            if parsed_date:
+                is_header = True
+                date_columns[col_idx] = parsed_date
+        
+        if is_header:
+            header_row_idx = idx
+            break
+
+    if header_row_idx == -1:
+        return Response({
+            'error': 'Format tidak dikenali. Pastikan ada baris header berisi tanggal (contoh: Senin, 01 Juni 2026)'
+        }, status=400)
+
+    # Proses Data Baris per Baris
+    schedule_data = {}
+    current_activity = ""
+
+    for idx in range(header_row_idx + 1, len(df)):
+        row = df.iloc[idx]
+        activity_name = str(row[0]).strip()
+        
+        # Skip baris kosong total
+        if (activity_name == '' or activity_name.lower() == 'nan') and \
+           all(str(row[i]).strip().lower() in ['nan', 'none', ''] for i in date_columns.keys()):
+            continue
+
+        # Handle Merged Cell simulation
+        if activity_name == '' or activity_name.lower() == 'nan':
+            activity_name = current_activity
+        else:
+            current_activity = activity_name
+            if activity_name not in schedule_data:
+                schedule_data[activity_name] = {'kategori': current_kategori, 'dates': {}}
+
+        # Ambil nama-nama dari setiap kolom tanggal
+        for col_idx, date_str in date_columns.items():
+            if col_idx < len(row):
+                cell_value = str(row[col_idx]).strip()
+                if cell_value and cell_value.lower() not in ['nan', 'none', '']:
+                    names = split_names(cell_value)
+                    
+                    if date_str not in schedule_data[activity_name]['dates']:
+                        schedule_data[activity_name]['dates'][date_str] = []
+                    
+                    schedule_data[activity_name]['dates'][date_str].extend(names)
+
+    # Simpan ke Database
+    for activity, data in schedule_data.items():
+        kategori = data['kategori']
+        for date_str, names in data['dates'].items():
+            try:
+                final_penyerta = "; ".join(names)
+                
+                # Tentukan Lokasi
+                if kategori == 'dalam_gedung':
+                    final_lokasi = 'Dalam Gedung'
+                    sub_kat = ''
+                else:
+                    final_lokasi = activity
+                    # Deteksi sub_kategori dari nama kegiatan
+                    activity_lower = activity.lower()
+                    if 'posyandu' in activity_lower:
+                        sub_kat = 'posyandu'
+                    elif 'inspeksi' in activity_lower or 'lingkungan' in activity_lower:
+                        sub_kat = 'inspeksi'
+                    elif 'rapat' in activity_lower:
+                        sub_kat = 'rapat'
+                    elif 'sekolah' in activity_lower or 'mi ' in activity_lower or 'mts' in activity_lower or 'smp' in activity_lower:
+                        sub_kat = 'sekolah'
+                    elif 'kunjungan' in activity_lower or 'lapangan' in activity_lower:
+                        sub_kat = 'kunjungan_lapangan'
+                    else:
+                        sub_kat = 'lainnya'
+
+                # Cek duplikat
+                if mode == 'append' and Kegiatan.objects.filter(
+                    tanggal=date_str, 
+                    kegiatan=capitalisasi_judul(activity), 
+                    lokasi=final_lokasi
+                ).exists():
+                    skipped += 1
+                    continue
+
+                Kegiatan.objects.create(
+                    tanggal=date_str,
+                    lokasi=final_lokasi,
+                    kegiatan=capitalisasi_judul(activity),
+                    penyerta=final_penyerta,
+                    kategori=kategori,
+                    sub_kategori=sub_kat,
+                    source='google_sheet'  # Set source
+                )
+                created += 1
+
+            except Exception as e:
+                errors.append(f'{activity} ({date_str}): {str(e)}')
+
+    msg = f'{created} data berhasil diproses.'
+    if mode == 'replace':
+        msg = f'Data dari Google Sheet lama dihapus. {msg}'
+    if skipped > 0:
+        msg += f' {skipped} data sudah ada dan dilewati.'
+    
+    result = {'message': msg, 'format': 'pivot'}
+    if errors:
+        result['peringatan'] = errors[:10]
+    return Response(result)
 
 
 # ─── Pencarian Admin ─────────────────────────────────────────────────────────
@@ -208,7 +424,7 @@ def search_admin(request):
     return Response(serializer.data)
 
 
-# ─── Pencarian User Umum (UPDATED - include kategori) ───────────────────────
+# ─── Pencarian User Umum (UPDATED - include kategori & source) ──────────────
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def search_user(request):
@@ -228,11 +444,12 @@ def search_user(request):
         'penyerta': k.penyerta,
         'kategori': k.kategori,
         'sub_kategori': k.sub_kategori,
+        'source': k.source,
     } for k in qs]
     return Response(data)
 
 
-# ─── Jadwal Terdekat (UPDATED - include kategori) ───────────────────────────
+# ─── Jadwal Terdekat (UPDATED - include kategori & source) ──────────────────
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def jadwal_terdekat(request):
@@ -246,6 +463,7 @@ def jadwal_terdekat(request):
         'penyerta': k.penyerta,
         'kategori': k.kategori,
         'sub_kategori': k.sub_kategori,
+        'source': k.source,
     } for k in qs]
     return Response(data)
 
@@ -275,7 +493,7 @@ def delete_kegiatan_by_date(request):
     return Response({'message': f'{deleted} data dihapus untuk {month}/{year}.'})
 
 
-# ─── Randomize Dalam Gedung (NEW) ───────────────────────────────────────────
+# ─── Randomize Dalam Gedung (UPDATED - set source='randomize') ──────────────
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def randomize_dalam_gedung(request):
@@ -323,7 +541,8 @@ def randomize_dalam_gedung(request):
                     kegiatan=j['kegiatan'],
                     penyerta=j['penyerta'],
                     kategori=j['kategori'],
-                    is_auto_generated=True
+                    is_auto_generated=True,
+                    source='randomize'  # Set source
                 )
                 saved += 1
 
