@@ -14,6 +14,7 @@ from .utils import capitalisasi_judul
 import pandas as pd
 import requests
 import re
+import traceback
 from io import StringIO
 from datetime import datetime
 
@@ -493,63 +494,101 @@ def delete_kegiatan_by_date(request):
     return Response({'message': f'{deleted} data dihapus untuk {month}/{year}.'})
 
 
-# ─── Randomize Dalam Gedung (UPDATED - set source='randomize') ──────────────
+# ─── Randomize Jadwal (UPDATED - dengan error handling lengkap) ──────────────
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def randomize_dalam_gedung(request):
-    from .randomize_logic import generate_jadwal_dalam_gedung
-
+    # Step 1: Import dengan error handling
+    try:
+        from .randomize_logic import generate_jadwal_dalam_gedung, generate_jadwal_luar_gedung
+    except ImportError as e:
+        return Response({
+            'error': f'Import error: {str(e)}',
+            'details': 'Pastikan randomize_logic.py dan constants.py sudah benar',
+            'traceback': traceback.format_exc()
+        }, status=500)
+    
+    # Step 2: Validasi input
     bulan = request.data.get('bulan')
     tahun = request.data.get('tahun')
-    minggu = request.data.get('minggu')
     loka_karya = request.data.get('loka_karya', False)
+    jenis = request.data.get('jenis', 'dalam_gedung')
 
-    if not all([bulan, tahun, minggu]):
-        return Response({'error': 'bulan, tahun, dan minggu diperlukan'}, status=400)
+    if not all([bulan, tahun]):
+        return Response({'error': 'bulan dan tahun diperlukan'}, status=400)
 
     try:
         bulan = int(bulan)
         tahun = int(tahun)
-        minggu = int(minggu)
     except ValueError:
-        return Response({'error': 'bulan, tahun, minggu harus angka'}, status=400)
+        return Response({'error': 'bulan dan tahun harus angka'}, status=400)
 
-    jadwal_list, skipped = generate_jadwal_dalam_gedung(bulan, tahun, minggu, loka_karya)
+    # Step 3: Generate jadwal dengan error handling
+    try:
+        if jenis == 'luar_gedung':
+            jadwal_dalam, skipped_dalam = generate_jadwal_dalam_gedung(bulan, tahun, loka_karya)
+            jadwal_list, skipped = generate_jadwal_luar_gedung(bulan, tahun, jadwal_dalam)
+        else:
+            jadwal_list, skipped = generate_jadwal_dalam_gedung(bulan, tahun, loka_karya)
 
-    if not jadwal_list:
-        return Response({'error': 'Gagal generate jadwal', 'skipped': skipped}, status=400)
+        if not jadwal_list:
+            return Response({
+                'error': 'Gagal generate jadwal',
+                'skipped': skipped,
+                'details': 'Tidak ada jadwal yang berhasil di-generate. Cek apakah ada hari libur atau tidak ada hari kerja di bulan tersebut.'
+            }, status=400)
 
-    preview = request.data.get('preview', True)
+        preview = request.data.get('preview', True)
 
-    if preview:
+        if preview:
+            return Response({
+                'message': f'Berhasil generate {len(jadwal_list)} jadwal',
+                'jadwal': jadwal_list,
+                'skipped': skipped
+            })
+        else:
+            # Step 4: Simpan ke database dengan error handling per item
+            saved = 0
+            save_errors = []
+            
+            for j in jadwal_list:
+                try:
+                    if not Kegiatan.objects.filter(
+                        tanggal=j['tanggal'],
+                        lokasi=j['lokasi'],
+                        kegiatan=j['kegiatan']
+                    ).exists():
+                        Kegiatan.objects.create(
+                            tanggal=j['tanggal'],
+                            lokasi=j['lokasi'],
+                            kegiatan=j['kegiatan'],
+                            penyerta=j['penyerta'],
+                            kategori=j['kategori'],
+                            is_auto_generated=j.get('is_auto_generated', True),
+                            source='randomize'
+                        )
+                        saved += 1
+                except Exception as e:
+                    save_errors.append(f"{j.get('tanggal')} - {j.get('kegiatan')}: {str(e)}")
+            
+            result = {
+                'message': f'Berhasil menyimpan {saved} jadwal',
+                'skipped': skipped,
+            }
+            
+            if save_errors:
+                result['peringatan'] = save_errors[:10]  # Batasi 10 error
+            
+            return Response(result)
+    
+    except Exception as e:
+        # Catch semua error dan return dengan detail
         return Response({
-            'message': f'Berhasil generate {len(jadwal_list)} jadwal',
-            'jadwal': jadwal_list,
-            'skipped': skipped
-        })
-    else:
-        saved = 0
-        for j in jadwal_list:
-            if not Kegiatan.objects.filter(
-                tanggal=j['tanggal'],
-                lokasi=j['lokasi'],
-                kegiatan=j['kegiatan']
-            ).exists():
-                Kegiatan.objects.create(
-                    tanggal=j['tanggal'],
-                    lokasi=j['lokasi'],
-                    kegiatan=j['kegiatan'],
-                    penyerta=j['penyerta'],
-                    kategori=j['kategori'],
-                    is_auto_generated=True,
-                    source='randomize'  # Set source
-                )
-                saved += 1
-
-        return Response({
-            'message': f'Berhasil menyimpan {saved} jadwal',
-            'skipped': skipped
-        })
+            'error': f'Gagal generate jadwal: {str(e)}',
+            'details': 'Periksa log untuk detail error',
+            'traceback': traceback.format_exc(),
+            'skipped': []
+        }, status=500)
 
 
 # ─── Hari Libur CRUD (NEW) ──────────────────────────────────────────────────
