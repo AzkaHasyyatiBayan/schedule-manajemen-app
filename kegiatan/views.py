@@ -8,6 +8,7 @@ from rest_framework.throttling import AnonRateThrottle
 from django.contrib.auth import authenticate
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from django.db import transaction
 from .models import Kegiatan, HariLibur
 from .serializers import KegiatanSerializer, HariLiburSerializer
 from .utils import capitalisasi_judul
@@ -494,7 +495,7 @@ def delete_kegiatan_by_date(request):
     return Response({'message': f'{deleted} data dihapus untuk {month}/{year}.'})
 
 
-# ─── Randomize Jadwal (UPDATED - dengan error handling lengkap) ──────────────
+# ─── Randomize Jadwal (FIXED - bulk_create untuk performa) ─────────────────
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def randomize_dalam_gedung(request):
@@ -547,18 +548,32 @@ def randomize_dalam_gedung(request):
                 'skipped': skipped
             })
         else:
-            # Step 4: Simpan ke database dengan error handling per item
-            saved = 0
-            save_errors = []
+            # Step 4: FILTER duplikat dulu SEBELUM bulk_create
+            # Ambil semua kombinasi (tanggal, lokasi, kegiatan) yang sudah ada
+            existing_keys = set(
+                Kegiatan.objects.filter(
+                    tanggal__in=[j['tanggal'] for j in jadwal_list]
+                ).values_list('tanggal', 'lokasi', 'kegiatan')
+            )
             
-            for j in jadwal_list:
-                try:
-                    if not Kegiatan.objects.filter(
-                        tanggal=j['tanggal'],
-                        lokasi=j['lokasi'],
-                        kegiatan=j['kegiatan']
-                    ).exists():
-                        Kegiatan.objects.create(
+            # Filter hanya yang belum ada
+            new_jadwal = [
+                j for j in jadwal_list
+                if (j['tanggal'], j['lokasi'], j['kegiatan']) not in existing_keys
+            ]
+            
+            if not new_jadwal:
+                return Response({
+                    'message': 'Tidak ada jadwal baru untuk disimpan (semua sudah ada)',
+                    'skipped': skipped,
+                    'saved': 0
+                })
+            
+            # Step 5: BULK CREATE dalam transaction (1 query untuk semua data)
+            try:
+                with transaction.atomic():
+                    objects_to_create = [
+                        Kegiatan(
                             tanggal=j['tanggal'],
                             lokasi=j['lokasi'],
                             kegiatan=j['kegiatan'],
@@ -567,19 +582,24 @@ def randomize_dalam_gedung(request):
                             is_auto_generated=j.get('is_auto_generated', True),
                             source='randomize'
                         )
-                        saved += 1
-                except Exception as e:
-                    save_errors.append(f"{j.get('tanggal')} - {j.get('kegiatan')}: {str(e)}")
+                        for j in new_jadwal
+                    ]
+                    
+                    Kegiatan.objects.bulk_create(objects_to_create, batch_size=100)
+                
+                return Response({
+                    'message': f'Berhasil menyimpan {len(new_jadwal)} jadwal',
+                    'skipped': skipped,
+                    'saved': len(new_jadwal),
+                    'dilewati_karena_duplikat': len(jadwal_list) - len(new_jadwal)
+                })
             
-            result = {
-                'message': f'Berhasil menyimpan {saved} jadwal',
-                'skipped': skipped,
-            }
-            
-            if save_errors:
-                result['peringatan'] = save_errors[:10]  # Batasi 10 error
-            
-            return Response(result)
+            except Exception as db_error:
+                return Response({
+                    'error': f'Gagal menyimpan ke database: {str(db_error)}',
+                    'details': 'Kemungkinan ada data yang tidak valid',
+                    'traceback': traceback.format_exc()
+                }, status=500)
     
     except Exception as e:
         # Catch semua error dan return dengan detail
