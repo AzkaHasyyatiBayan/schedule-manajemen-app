@@ -468,32 +468,22 @@ def delete_kegiatan_by_date(request):
     return Response({'message': f'{deleted} data dihapus untuk {month}/{year}.'})
 
 
-# ─── Randomize Jadwal (FIXED - indentasi benar + normalisasi jenis) ──────────
+# ─── Randomize Jadwal Dalam Gedung ───────────────────────────────────────────
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def randomize_dalam_gedung(request):
-    # Step 1: Import dengan error handling
     try:
-        from .randomize_logic import generate_jadwal_dalam_gedung, generate_jadwal_luar_gedung
+        from .randomize_logic import generate_jadwal_dalam_gedung
     except ImportError as e:
         return Response({
             'error': f'Import error: {str(e)}',
-            'details': 'Pastikan randomize_logic.py dan constants.py sudah benar',
             'traceback': traceback.format_exc()
         }, status=500)
     
-    # Step 2: Validasi input
     bulan = request.data.get('bulan')
     tahun = request.data.get('tahun')
     loka_karya = request.data.get('loka_karya', False)
     
-    # ✅ FIX: Normalisasi jenis jadwal (handle berbagai format input)
-    jenis_raw = str(request.data.get('jenis', 'dalam_gedung')).strip().lower()
-    jenis = jenis_raw.replace(' ', '_').replace('-', '_')
-    if jenis not in ['dalam_gedung', 'luar_gedung']:
-        jenis = 'dalam_gedung'  # Default fallback
-    
-    # ✅ FIX: Validasi bulan & tahun (INDENTASI BENAR - di luar blok if jenis)
     if not all([bulan, tahun]):
         return Response({'error': 'bulan dan tahun diperlukan'}, status=400)
 
@@ -503,19 +493,13 @@ def randomize_dalam_gedung(request):
     except ValueError:
         return Response({'error': 'bulan dan tahun harus angka'}, status=400)
 
-    # Step 3: Generate jadwal dengan error handling
     try:
-        if jenis == 'luar_gedung':
-            jadwal_dalam, skipped_dalam = generate_jadwal_dalam_gedung(bulan, tahun, loka_karya)
-            jadwal_list, skipped = generate_jadwal_luar_gedung(bulan, tahun, jadwal_dalam)
-        else:
-            jadwal_list, skipped = generate_jadwal_dalam_gedung(bulan, tahun, loka_karya)
+        jadwal_list, skipped = generate_jadwal_dalam_gedung(bulan, tahun, loka_karya)
 
         if not jadwal_list:
             return Response({
                 'error': 'Gagal generate jadwal',
-                'skipped': skipped,
-                'details': 'Tidak ada jadwal yang berhasil di-generate. Cek apakah ada hari libur atau tidak ada hari kerja di bulan tersebut.'
+                'skipped': skipped
             }, status=400)
 
         preview = request.data.get('preview', True)
@@ -524,32 +508,23 @@ def randomize_dalam_gedung(request):
             return Response({
                 'message': f'Berhasil generate {len(jadwal_list)} jadwal',
                 'jadwal': jadwal_list,
-                'skipped': skipped,
-                'jenis': jenis  # Tambah info jenis untuk debug
+                'skipped': skipped
             })
         else:
-            # Step 4: FILTER duplikat dulu SEBELUM bulk_create
-            existing_keys = set(
-                Kegiatan.objects.filter(
-                    tanggal__in=[j['tanggal'] for j in jadwal_list]
-                ).values_list('tanggal', 'lokasi', 'kegiatan')
-            )
-            
-            new_jadwal = [
-                j for j in jadwal_list
-                if (j['tanggal'], j['lokasi'], j['kegiatan']) not in existing_keys
-            ]
-            
-            if not new_jadwal:
-                return Response({
-                    'message': 'Tidak ada jadwal baru untuk disimpan (semua sudah ada)',
-                    'skipped': skipped,
-                    'saved': 0
-                })
-            
-            # Step 5: BULK CREATE dalam transaction
+            # Save dengan bulk_create
             try:
                 with transaction.atomic():
+                    existing_keys = set(
+                        Kegiatan.objects.filter(
+                            tanggal__in=[j['tanggal'] for j in jadwal_list]
+                        ).values_list('tanggal', 'lokasi', 'kegiatan')
+                    )
+                    
+                    new_jadwal = [
+                        j for j in jadwal_list
+                        if (j['tanggal'], j['lokasi'], j['kegiatan']) not in existing_keys
+                    ]
+                    
                     objects_to_create = [
                         Kegiatan(
                             tanggal=j['tanggal'],
@@ -567,25 +542,237 @@ def randomize_dalam_gedung(request):
                 
                 return Response({
                     'message': f'Berhasil menyimpan {len(new_jadwal)} jadwal',
-                    'skipped': skipped,
-                    'saved': len(new_jadwal),
-                    'dilewati_karena_duplikat': len(jadwal_list) - len(new_jadwal),
-                    'jenis': jenis  # Tambah info jenis untuk debug
+                    'saved': len(new_jadwal)
                 })
             
             except Exception as db_error:
                 return Response({
-                    'error': f'Gagal menyimpan ke database: {str(db_error)}',
-                    'details': 'Kemungkinan ada data yang tidak valid',
+                    'error': f'Gagal menyimpan: {str(db_error)}',
                     'traceback': traceback.format_exc()
                 }, status=500)
     
     except Exception as e:
         return Response({
-            'error': f'Gagal generate jadwal: {str(e)}',
-            'details': 'Periksa log untuk detail error',
-            'traceback': traceback.format_exc(),
-            'skipped': []
+            'error': f'Gagal generate: {str(e)}',
+            'traceback': traceback.format_exc()
+        }, status=500)
+
+
+# ─── Randomize Jadwal Luar Gedung - BOK ──────────────────────────────────────
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def randomize_luar_gedung_bok(request):
+    """Generate jadwal luar gedung kategori BOK saja"""
+    try:
+        from .randomize_logic import generate_jadwal_luar_gedung_bok
+    except ImportError as e:
+        return Response({
+            'error': f'Import error: {str(e)}',
+            'traceback': traceback.format_exc()
+        }, status=500)
+    
+    bulan = request.data.get('bulan')
+    tahun = request.data.get('tahun')
+    
+    if not all([bulan, tahun]):
+        return Response({'error': 'bulan dan tahun diperlukan'}, status=400)
+
+    try:
+        bulan = int(bulan)
+        tahun = int(tahun)
+    except ValueError:
+        return Response({'error': 'bulan dan tahun harus angka'}, status=400)
+
+    try:
+        jadwal_list, skipped = generate_jadwal_luar_gedung_bok(bulan, tahun)
+
+        if not jadwal_list:
+            return Response({
+                'error': 'Gagal generate jadwal BOK',
+                'skipped': skipped
+            }, status=400)
+
+        preview = request.data.get('preview', True)
+
+        if preview:
+            return Response({
+                'message': f'Berhasil generate {len(jadwal_list)} jadwal BOK',
+                'jadwal': jadwal_list,
+                'skipped': skipped
+            })
+        else:
+            try:
+                with transaction.atomic():
+                    existing_keys = set(
+                        Kegiatan.objects.filter(
+                            tanggal__in=[j['tanggal'] for j in jadwal_list]
+                        ).values_list('tanggal', 'lokasi', 'kegiatan')
+                    )
+                    
+                    new_jadwal = [
+                        j for j in jadwal_list
+                        if (j['tanggal'], j['lokasi'], j['kegiatan']) not in existing_keys
+                    ]
+                    
+                    objects_to_create = [
+                        Kegiatan(
+                            tanggal=j['tanggal'],
+                            lokasi=j['lokasi'],
+                            kegiatan=j['kegiatan'],
+                            penyerta=j['penyerta'],
+                            kategori='luar_gedung',
+                            sub_kategori='bok',
+                            is_auto_generated=True,
+                            source='randomize'
+                        )
+                        for j in new_jadwal
+                    ]
+                    
+                    Kegiatan.objects.bulk_create(objects_to_create, batch_size=100)
+                
+                return Response({
+                    'message': f'Berhasil menyimpan {len(new_jadwal)} jadwal BOK',
+                    'saved': len(new_jadwal)
+                })
+            
+            except Exception as db_error:
+                return Response({
+                    'error': f'Gagal menyimpan: {str(db_error)}',
+                    'traceback': traceback.format_exc()
+                }, status=500)
+    
+    except Exception as e:
+        return Response({
+            'error': f'Gagal generate: {str(e)}',
+            'traceback': traceback.format_exc()
+        }, status=500)
+
+
+# ─── Randomize Jadwal Luar Gedung - Lainnya ──────────────────────────────────
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def randomize_luar_gedung_lainnya(request):
+    """Generate jadwal luar gedung kategori lainnya (Posyandu, Posbindu, UKK, dll)"""
+    try:
+        from .randomize_logic import generate_jadwal_luar_gedung_lainnya
+    except ImportError as e:
+        return Response({
+            'error': f'Import error: {str(e)}',
+            'traceback': traceback.format_exc()
+        }, status=500)
+    
+    bulan = request.data.get('bulan')
+    tahun = request.data.get('tahun')
+    
+    if not all([bulan, tahun]):
+        return Response({'error': 'bulan dan tahun diperlukan'}, status=400)
+
+    try:
+        bulan = int(bulan)
+        tahun = int(tahun)
+    except ValueError:
+        return Response({'error': 'bulan dan tahun harus angka'}, status=400)
+
+    try:
+        jadwal_list, skipped = generate_jadwal_luar_gedung_lainnya(bulan, tahun)
+
+        if not jadwal_list:
+            return Response({
+                'error': 'Gagal generate jadwal',
+                'skipped': skipped
+            }, status=400)
+
+        preview = request.data.get('preview', True)
+
+        if preview:
+            return Response({
+                'message': f'Berhasil generate {len(jadwal_list)} jadwal',
+                'jadwal': jadwal_list,
+                'skipped': skipped
+            })
+        else:
+            try:
+                with transaction.atomic():
+                    existing_keys = set(
+                        Kegiatan.objects.filter(
+                            tanggal__in=[j['tanggal'] for j in jadwal_list]
+                        ).values_list('tanggal', 'lokasi', 'kegiatan')
+                    )
+                    
+                    new_jadwal = [
+                        j for j in jadwal_list
+                        if (j['tanggal'], j['lokasi'], j['kegiatan']) not in existing_keys
+                    ]
+                    
+                    objects_to_create = [
+                        Kegiatan(
+                            tanggal=j['tanggal'],
+                            lokasi=j['lokasi'],
+                            kegiatan=j['kegiatan'],
+                            penyerta=j['penyerta'],
+                            kategori='luar_gedung',
+                            sub_kategori=j.get('sub_kategori', 'lainnya'),
+                            is_auto_generated=True,
+                            source='randomize'
+                        )
+                        for j in new_jadwal
+                    ]
+                    
+                    Kegiatan.objects.bulk_create(objects_to_create, batch_size=100)
+                
+                return Response({
+                    'message': f'Berhasil menyimpan {len(new_jadwal)} jadwal',
+                    'saved': len(new_jadwal)
+                })
+            
+            except Exception as db_error:
+                return Response({
+                    'error': f'Gagal menyimpan: {str(db_error)}',
+                    'traceback': traceback.format_exc()
+                }, status=500)
+    
+    except Exception as e:
+        return Response({
+            'error': f'Gagal generate: {str(e)}',
+            'traceback': traceback.format_exc()
+        }, status=500)
+
+
+# ─── Simpan Jadwal dengan Edit ───────────────────────────────────────────────
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def simpan_jadwal_with_edit(request):
+    """Simpan jadwal yang sudah diedit dari preview"""
+    jadwal_list = request.data.get('jadwal', [])
+    
+    if not jadwal_list:
+        return Response({'error': 'Tidak ada jadwal untuk disimpan'}, status=400)
+    
+    try:
+        with transaction.atomic():
+            saved_count = 0
+            for item in jadwal_list:
+                Kegiatan.objects.create(
+                    tanggal=item.get('tanggal'),
+                    lokasi=item.get('lokasi'),
+                    kegiatan=item.get('kegiatan'),
+                    penyerta=item.get('penyerta'),
+                    kategori=item.get('kategori', 'luar_gedung'),
+                    sub_kategori=item.get('sub_kategori', 'lainnya'),
+                    is_auto_generated=True,
+                    source='randomize'
+                )
+                saved_count += 1
+        
+        return Response({
+            'message': f'Berhasil menyimpan {saved_count} jadwal',
+            'saved': saved_count
+        })
+    
+    except Exception as e:
+        return Response({
+            'error': f'Gagal menyimpan: {str(e)}',
+            'traceback': traceback.format_exc()
         }, status=500)
 
 

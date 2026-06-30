@@ -56,6 +56,21 @@ NAMA_DIECUALIKAN = [
     "Isep Suhendar,SKM"
 ]
 
+# ─── NAMA YANG TIDAK BOLEH DI KEGIATAN BOK ─────────────────────────────────
+NAMA_TIDAK_BOLEH_BOK = [
+    "Intang Sri Purnama,AM.Keb",
+    "Ameilia Putri Isyari,S.Gz",
+    "Ucu Lestari,AM.Keb",
+    "Annisa Nafaulloh,S.Tr.Keb.,Bdn",
+    "Dede Aan Septiantini,A.Md.Kep",
+    "Yogi Aris Diyanto,S.E",
+    "Rangga Ismardana Gasbela,S.T",
+    "Pupung Juliana",
+    "Salsa Sabila",
+    "Andina Dea Priatna,SKM",
+    "Iip Supyan"
+]
+
 # ─── KELOMPOK TETAP ──────────────────────────────────────────────────────────
 PENDAFTARAN_TETAP = [
     "Winda Siti Sarah, AMd.RMIK",
@@ -132,12 +147,10 @@ RULES_DOKTER_KEGIATAN = {
         'KLASTER DEWASA-LANSIA 2': [1, 3],
     },
     'dr.Muhammad Azhary Romdhon': {
-        'KLASTER IBU KIA & USG': [0, 2],  # Senin & Rabu
-        'KLASTER ANAK': [0, 1, 2, 3, 4, 5],  # Semua hari kerja
+        'KLASTER IBU KIA & USG': [0, 2],  # Senin & Rabu SAJA
     },
     'dr.Ferry Nalapraya': {
-        'KLASTER IBU KIA & USG': [1, 3],  # Selasa & Kamis
-        'KLASTER ANAK': [0, 1, 2, 3, 4, 5],
+        'KLASTER IBU KIA & USG': [1, 3],  # Selasa & Kamis SAJA
     },
 }
 

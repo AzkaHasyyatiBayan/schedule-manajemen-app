@@ -26,6 +26,8 @@ def is_dokter_available_for_kegiatan(nama, kegiatan, tanggal_obj):
         rules = RULES_DOKTER_KEGIATAN[nama]
         if kegiatan in rules:
             return hari in rules[kegiatan]
+        # Jika kegiatan TIDAK ada di rules, berarti tidak ada aturan khusus → boleh
+        return True
     return True
 
 
@@ -81,7 +83,6 @@ def get_work_days_in_month(bulan, tahun):
         # Skip Minggu (6)
         if tgl_obj.weekday() == 6:
             continue
-        # Skip hari libur
         if cek_hari_libur(tgl_obj):
             continue
         work_days.append(tgl_obj)
@@ -107,7 +108,6 @@ def generate_jadwal_dalam_gedung(bulan, tahun, loka_karya=False):
         tgl_str = tgl_obj.strftime('%Y-%m-%d')
         hari_name = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][tgl_obj.weekday()]
         
-        # Cek yang libur karena piket malam H-1
         libur_malam = cek_piket_malam_sebelumnya(tgl_obj)
         used_today = set(libur_malam)
         
@@ -212,6 +212,7 @@ def generate_jadwal_dalam_gedung(bulan, tahun, loka_karya=False):
             })
         
         # h. KLASTER ANAK (1 dokter + 2 bidan)
+        # Semua dokter KIA boleh masuk, tapi tetap cek CUTI_KHUSUS
         dok = rpf(POOL_DOKTER_KIA, 1, used_today, used_month, tgl_obj, kegiatan='KLASTER ANAK')
         bidan = rpf(POOL_BIDAN, 2, used_today, used_month, tgl_obj)
         if dok and len(bidan) >= 2:
@@ -374,7 +375,6 @@ def generate_jadwal_luar_gedung(bulan, tahun, jadwal_dalam_gedung=None):
         return [], ["Tidak ada hari kerja di bulan ini"]
     
     # Track siapa yang sudah dipakai di luar gedung per hari
-    # Format: {tanggal_str: set(nama)}
     used_luar_per_day = {d.strftime('%Y-%m-%d'): set() for d in work_days}
     
     # Track siapa yang dipakai di dalam gedung per hari
@@ -390,8 +390,8 @@ def generate_jadwal_luar_gedung(bulan, tahun, jadwal_dalam_gedung=None):
     # Track lokasi per bulan untuk distribusi merata
     lokasi_count = {lok: 0 for lok in LOKASI_LUAR_GEDUNG}
     
-    # Shuffle work days untuk randomisasi
-    random.shuffle(work_days)
+    work_days_shuffled = work_days.copy()
+    random.shuffle(work_days_shuffled)
     
     # Process setiap kegiatan luar gedung
     for kegiatan_name, config in KEGIATAN_LUAR_GEDUNG.items():
@@ -406,14 +406,13 @@ def generate_jadwal_luar_gedung(bulan, tahun, jadwal_dalam_gedung=None):
         
         placed = 0
         attempts = 0
-        max_attempts = freq * 10  # Batasi percobaan
+        max_attempts = freq * 20 
         
         while placed < freq and attempts < max_attempts:
             attempts += 1
             
             # Pilih hari random
             if tanggal_fixed:
-                # Cek apakah tanggal fixed ada di work_days
                 try:
                     tgl_obj = datetime(tahun, bulan, tanggal_fixed)
                     if tgl_obj not in work_days:
@@ -422,7 +421,7 @@ def generate_jadwal_luar_gedung(bulan, tahun, jadwal_dalam_gedung=None):
                 except:
                     break
             else:
-                tgl_obj = random.choice(work_days)
+                tgl_obj = random.choice(work_days_shuffled)
             
             tgl_str = tgl_obj.strftime('%Y-%m-%d')
             
@@ -450,7 +449,6 @@ def generate_jadwal_luar_gedung(bulan, tahun, jadwal_dalam_gedung=None):
             if lokasi_fixed:
                 lokasi = lokasi_fixed
             else:
-                # Distribusi merata ke 4 lokasi
                 min_lokasi = min(lokasi_count, key=lokasi_count.get)
                 lokasi = min_lokasi
             
