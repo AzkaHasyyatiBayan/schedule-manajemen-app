@@ -36,6 +36,12 @@ NAMA_TIDAK_BOLEH_BOK = [
     "Salsa Sabila", "Andina Dea Priatna,SKM", "Iip Supyan"
 ]
 
+# ─── NAMA YANG HANYA BOLEH DI PUSTU (TIDAK BOLEH DI KEGIATAN DALAM GEDUNG LAIN) ──
+NAMA_HANYA_PUSTU = [
+    "Ujang Effendi, S.Kep.,Ners",
+    "Haeriah, A.Md.Kep",
+]
+
 # ─── KELOMPOK TETAP ──────────────────────────────────────────────────────────
 PENDAFTARAN_TETAP = ["Winda Siti Sarah, AMd.RMIK", "Pupung Juliana", "Salsa Sabila"]
 BP_GIGI_TETAP = ["drg.Rifan Hanggoro.M.M.R.S", "Endah Setiawati,S.Tr.Kes"]
@@ -48,35 +54,42 @@ PUSTU_SUMELAP = "Ujang Effendi, S.Kep.,Ners"
 
 # ─── CUTI KHUSUS ─────────────────────────────────────────────────────────────
 CUTI_KHUSUS = {
-    'dr.Muhammad Azhary Romdhon': [1, 3],
-    'dr.Iwan Setiawan': [5],
+    'dr.Muhammad Azhary Romdhon': [1, 3],  # Selasa & Kamis
+    'dr.Iwan Setiawan': [5],  # Sabtu
 }
 
 # ─── RULES DOKTER (STRICT SESUAI DOKUMEN TERBARU) ────────────────────────────
 RULES_DOKTER_KEGIATAN = {
     'dr. Volti Diana Suryawadi': {
-        'KLASTER DEWASA-LANSIA 1': [0],
-        'KLASTER DEWASA-LANSIA 2': [5],
+        'KLASTER DEWASA-LANSIA 1': [0],  # Senin SAJA
+        'KLASTER DEWASA-LANSIA 2': [5],  # Sabtu SAJA
     },
     'dr. Siti Hana Fukui': {
-        'KLASTER DEWASA-LANSIA 1': [1],
-        'KLASTER DEWASA-LANSIA 2': [3],
+        'KLASTER DEWASA-LANSIA 1': [1],  # Selasa SAJA
+        'KLASTER DEWASA-LANSIA 2': [3],  # Kamis SAJA
     },
     'dr.Muhammad Azhary Romdhon': {
-        'KLASTER IBU KIA & USG': [0, 2],
+        'KLASTER IBU KIA & USG': [0, 2],  # Senin & Rabu SAJA
     },
     'dr.Ferry Nalapraya': {
-        'KLASTER IBU KIA & USG': [1, 3],
+        'KLASTER IBU KIA & USG': [1, 3],  # Selasa & Kamis SAJA
     },
 }
 
-# ─── POOL DALAM GEDUNG ──────────────────────────────────────────────────────
+# ─── POOL DALAM GEDUNG (ORIGINAL) ──────────────────────────────────────────────
 POOL_DOKTER = ['dr.Ferry Nalapraya', 'dr.Muhammad Azhary Romdhon', 'dr.Iwan Setiawan', 'dr. Siti Hana Fukui', 'dr. Volti Diana Suryawadi', 'Mutia Wulansari.,S.Kep.,Ners', 'Ujang Effendi, S.Kep.,Ners', 'Liska Permatasari, S.Kep.,Ners', 'Wida Idul Adha, S.Kep.,Ners']
 POOL_DOKTER_KIA = ['dr.Ferry Nalapraya', 'dr.Muhammad Azhary Romdhon', 'dr.Iwan Setiawan']
 POOL_BIDAN = ['Bdn. Yeni Yulyani Setianingsih, S.ST', 'Bdn. Nina Ainun, S.Tr.Keb', 'Rita Sahara, S.Tr.Keb', 'Dewi Sri Mulyani, Am.Keb', 'Pipit Puspitasari, Am.Keb', 'Mira Jatnikawati, Am.Keb', 'Reni Mustikasari, Am.Keb', 'Alitsa Nuur Fithri, S.ST', 'Yesi Apriyani, Am.Keb', 'Asri Awulan, S.Tr.Keb', 'Pia Nur Podiana, A.Md.Keb', 'Intang Sri Purnama, AM.Keb', 'Ucu Lestari, AM.Keb', 'Annisa Nafaulloh,S.Tr.Keb.,Bdn']
 POOL_ILP = ['Mutia Wulansari.,S.Kep.,Ners', 'Liska Permatasari, S.Kep.,Ners', 'Dede Khaerul Kamal Muchtar, AMK', 'Iman Nurul Haq, A.Md.Kep', 'Wida Idul Adha, S.Kep.,Ners', 'Oriany Kemala Dewi, Amd.Kep', 'Dede Aan Septiantini, A.Md.Kep', 'Bdn. Yeni Yulyani Setianingsih, S.ST', 'Bdn. Nina Ainun, S.Tr.Keb', 'Rita Sahara, S.Tr.Keb', 'Dewi Sri Mulyani, Am.Keb', 'Pipit Puspitasari, Am.Keb', 'Mira Jatnikawati, Am.Keb', 'Reni Mustikasari, Am.Keb', 'Alitsa Nuur Fithri, S.ST', 'Yesi Apriyani, Am.Keb', 'Asri Awulan, S.Tr.Keb', 'Pia Nur Podiana, A.Md.Keb', 'Intang Sri Purnama, AM.Keb', 'Ucu Lestari, AM.Keb', 'Annisa Nafaulloh,S.Tr.Keb.,Bdn', 'Rudi Sutikno, SKM', 'Eko Wahyu Saputro, S.K.M', 'Nurul Hasanah, A.Md.KL', 'Ameilia Putri Isyari, S.Gz', 'Annisa Fauziah, A.Md.Gz']
 POOL_TINDAKAN = ['Mutia Wulansari.,S.Kep.,Ners', 'Liska Permatasari, S.Kep.,Ners', 'Dede Khaerul Kamal Muchtar, AMK', 'Iman Nurul Haq, A.Md.Kep', 'Wida Idul Adha, S.Kep.,Ners', 'Oriany Kemala Dewi, Amd.Kep', 'Dede Aan Septiantini, A.Md.Kep']
 LOKA_KARYA_MINI = ['Dewi Sri Mulyani, Am.Keb', 'Pipit Puspitasari, Am.Keb', 'Mira Jatnikawati, Am.Keb', 'Reni Mustikasari, Am.Keb', 'Asri Awulan, S.Tr.Keb', 'Ujang Effendi, S.Kep.,Ners', 'Haeriah, A.Md.Kep']
+
+# ─── POOL DALAM GEDUNG (FILTERED - TANPA UJANG & HAERIAH) ─────────────────────
+# Pool ini digunakan untuk kegiatan dalam gedung SELAIN Pustu
+POOL_DOKTER_F = [n for n in POOL_DOKTER if n not in NAMA_HANYA_PUSTU]
+POOL_ILP_F = [n for n in POOL_ILP if n not in NAMA_HANYA_PUSTU]
+POOL_TINDAKAN_F = [n for n in POOL_TINDAKAN if n not in NAMA_HANYA_PUSTU]
+LOKA_KARYA_MINI_F = [n for n in LOKA_KARYA_MINI if n not in NAMA_HANYA_PUSTU]
 
 # ─── POOL LUAR GEDUNG ────────────────────────────────────────────────────────
 POOL_PETUGAS_DOKTER_GIGI = ['dr.Ferry Nalapraya', 'drg.Rifan Hanggoro.M.M.R.S']
@@ -158,7 +171,7 @@ DAFTAR_UKK = [
 ]
 
 DAFTAR_SEKOLAH_PESANTREN = [
-    'Al-Ma\'muniyyah', 'Al-Istiqomah', 'Al-Barokah', 'Raudlatutta\'allum',
+    'Al-Ma\'muniyah', 'Al-Istiqomah', 'Al-Barokah', 'Raudlatutta\'allum',
     'Al-Ikhsan', 'Bustanul Ulum', 'Al-Furqon', 'Baetul Rohman',
     'Al-Muflih', 'Nurul Ihsan', 'Al-Falah', 'Babul Hikmah', 'Al-Huda',
     'Miftahul Ulum', 'Al-Musyri', 'Darul Ulum', 'Miftahul Anwar', 'Raudatul Ulum',
@@ -168,7 +181,7 @@ DAFTAR_SEKOLAH_PESANTREN = [
     'Miftahul Khoer Al-Musri II', 'Miftahul Ihsan', 'Al-Abror', 'Cilampahan'
 ]
 
-# ─── DEFINISI KEGIATAN BOK (31 kegiatan) ────────────────────────────────────
+# ─── DEFINISI KEGIATAN BOK (31 kegiatan + Sekolah/Pesantren) ─────────────────
 KEGIATAN_BOK = {
     'Pelacakan dan pengawasan minum obat untuk ODGJ Berat': {'freq': 25, 'petugas': POOL_PETUGAS_DOKTER_GIGI, 'penyerta': ['Bdn. Yeni Yulyani Setianingsih, S.ST', 'Bdn. Nina Ainun, S.Tr.Keb', 'Rita Sahara, S.Tr.Keb', 'Dewi Sri Mulyani, Am.Keb', 'Pipit Puspitasari, Am.Keb', 'Mira Jatnikawati, Am.Keb', 'Reni Mustikasari, Am.Keb', 'Alitsa Nuur Fithri, S.ST', 'Yesi Apriyani, Am.Keb', 'Asri Awulan, S.Tr.Keb', 'Pia Nur Podiana, A.Md.Keb', 'Dede Khaerul Kamal Muchtar, AMK'], 'allow_double_dalam': True, 'allow_double_luar': False},
     'Pelacakan dan pelaporan kematian dan pelaksanaan otopsi verbal kematian Bayi/balita': {'freq': 1, 'petugas': POOL_PETUGAS_DOKTER_GIGI, 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'allow_double_dalam': False, 'allow_double_luar': False},
@@ -201,6 +214,9 @@ KEGIATAN_BOK = {
     'Penyelidikan Epidimiologi Penyakit Arbovirosis': {'freq': 4, 'petugas': ['Iman Nurul Haq, A.Md.Kep'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'allow_double_dalam': True, 'allow_double_luar': False},
     'Penyelidikan Epidimiologi Penyakit Zoonosis': {'freq': 2, 'petugas': ['Iman Nurul Haq, A.Md.Kep'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'allow_double_dalam': True, 'allow_double_luar': False},
     'Pendampingan pelaksanaan ILP di pustu dan Unit Pelayanan Kesehatan Desa/Kelurahan (UPKD/K)': {'freq': 1, 'petugas': ['Rudi Sutikno, SKM'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'allow_double_dalam': False, 'allow_double_luar': False},
+    # ─── SEKOLAH/PESANTREN (MASUK BOK) ──────────────────────────────────────
+    'Skrining Kesehatan di Sekolah': {'freq': 4, 'petugas': ['drg.Rifan Hanggoro.M.M.R.S'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'count_penyerta': 3, 'allow_double_dalam': False, 'allow_double_luar': False, 'is_sekolah': True},
+    'Pembinaan Kesehatan di Sekolah': {'freq': 4, 'petugas': ['Rudi Sutikno, SKM'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'allow_double_dalam': False, 'allow_double_luar': False, 'is_sekolah': True},
 }
 
 # ─── KEGIATAN POSYANDU/POSBINDU/UKK/POS REMAJA ──────────────────────────────
@@ -215,4 +231,3 @@ KEGIATAN_POSYANDU_LIST = [
 ]
 
 KEGIATAN_POS_REMAJA_LIST = [('Pembinaan Kesehatan di Komunitas', 2)]
-KEGIATAN_SEKOLAH_LIST = [('Skrining Kesehatan di Sekolah', 4), ('Pembinaan Kesehatan di Sekolah', 4)]

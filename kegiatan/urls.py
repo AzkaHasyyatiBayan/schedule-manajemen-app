@@ -18,5 +18,7 @@ urlpatterns = [
     path('randomize-dalam-gedung/', views.randomize_dalam_gedung, name='randomize-dalam-gedung'),
     path('hari-libur/', views.hari_libur_list, name='hari-libur-list'),
     path('hari-libur/<int:pk>/', views.hari_libur_detail, name='hari-libur-detail'),
-    path('randomize-sekolah/', views.randomize_sekolah, name='randomize_sekolah'),
+    path('randomize-luar-gedung-bok/', views.randomize_luar_gedung_bok, name='randomize_luar_gedung_bok'),
+    path('randomize-luar-gedung-lainnya/', views.randomize_luar_gedung_lainnya, name='randomize_luar_gedung_lainnya'),
+    path('simpan-jadwal-with-edit/', views.simpan_jadwal_with_edit, name='simpan_jadwal_with_edit'),
 ]
