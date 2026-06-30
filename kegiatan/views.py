@@ -9,6 +9,7 @@ from django.contrib.auth import authenticate
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.db import transaction
+from django.utils import timezone
 from .models import Kegiatan, HariLibur
 from .serializers import KegiatanSerializer, HariLiburSerializer
 from .utils import capitalisasi_judul
@@ -23,6 +24,56 @@ from datetime import datetime
 # ─── Throttle khusus untuk login ─────────────────────────────────────────────
 class LoginRateThrottle(AnonRateThrottle):
     scope = 'login'
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HELPER: AUTO SYNC HARI LIBUR (BARU)
+# ═══════════════════════════════════════════════════════════════════════════════
+def auto_sync_hari_libur_if_needed(tahun):
+    """
+    Cek apakah hari libur untuk tahun tertentu sudah ada di database.
+    Jika belum, otomatis sync dari API Nager.Date.
+    Returns: (success: bool, message: str)
+    """
+    # Cek apakah sudah ada data hari libur untuk tahun ini
+    existing_count = HariLibur.objects.filter(tanggal__year=tahun).count()
+    
+    if existing_count > 0:
+        return True, f"Hari libur tahun {tahun} sudah ada ({existing_count} data)"
+    
+    try:
+        # Fetch dari API Nager.Date
+        url = f"https://date.nager.at/api/v3/PublicHolidays/{tahun}/ID"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        holidays = response.json()
+        created_count = 0
+        
+        for holiday in holidays:
+            tanggal = holiday['date']
+            nama_libur = holiday.get('localName', holiday.get('name', 'Hari Libur'))
+            
+            # Skip jika sudah ada
+            if HariLibur.objects.filter(tanggal=tanggal).exists():
+                continue
+            
+            # Tentukan jenis libur
+            jenis = 'nasional'
+            if 'Cuti Bersama' in nama_libur or 'Joint Holiday' in nama_libur:
+                jenis = 'cuti_bersama'
+            
+            HariLibur.objects.create(
+                tanggal=tanggal,
+                keterangan=nama_libur,
+                jenis=jenis
+            )
+            created_count += 1
+        
+        return True, f"Auto-sync berhasil: {created_count} hari libur tahun {tahun} ditambahkan"
+    
+    except Exception as e:
+        return False, f"Auto-sync gagal: {str(e)}"
 
 
 # ─── ViewSet CRUD (hanya admin dengan token) ─────────────────────────────────
@@ -493,6 +544,16 @@ def randomize_dalam_gedung(request):
     except ValueError:
         return Response({'error': 'bulan dan tahun harus angka'}, status=400)
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # AUTO SYNC HARI LIBUR (BARU)
+    # ═══════════════════════════════════════════════════════════════════════════
+    sync_success, sync_message = auto_sync_hari_libur_if_needed(tahun)
+    if not sync_success:
+        return Response({
+            'warning': sync_message,
+            'details': 'Hari libur mungkin tidak lengkap, jadwal bisa tidak akurat'
+        }, status=200)  # Return 200 dengan warning, bukan error
+
     try:
         jadwal_list, skipped = generate_jadwal_dalam_gedung(bulan, tahun, loka_karya)
 
@@ -508,7 +569,8 @@ def randomize_dalam_gedung(request):
             return Response({
                 'message': f'Berhasil generate {len(jadwal_list)} jadwal',
                 'jadwal': jadwal_list,
-                'skipped': skipped
+                'skipped': skipped,
+                'sync_info': sync_message  # Info sync hari libur
             })
         else:
             # Save dengan bulk_create
@@ -542,7 +604,8 @@ def randomize_dalam_gedung(request):
                 
                 return Response({
                     'message': f'Berhasil menyimpan {len(new_jadwal)} jadwal',
-                    'saved': len(new_jadwal)
+                    'saved': len(new_jadwal),
+                    'sync_info': sync_message
                 })
             
             except Exception as db_error:
@@ -582,6 +645,16 @@ def randomize_luar_gedung_bok(request):
     except ValueError:
         return Response({'error': 'bulan dan tahun harus angka'}, status=400)
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # AUTO SYNC HARI LIBUR (BARU)
+    # ═══════════════════════════════════════════════════════════════════════════
+    sync_success, sync_message = auto_sync_hari_libur_if_needed(tahun)
+    if not sync_success:
+        return Response({
+            'warning': sync_message,
+            'details': 'Hari libur mungkin tidak lengkap, jadwal bisa tidak akurat'
+        }, status=200)
+
     try:
         # Generate dengan error handling
         jadwal_list, skipped = generate_jadwal_luar_gedung_bok(bulan, tahun)
@@ -605,7 +678,8 @@ def randomize_luar_gedung_bok(request):
             return Response({
                 'message': f'Berhasil generate {len(jadwal_list)} jadwal BOK',
                 'jadwal': jadwal_list,
-                'skipped': skipped
+                'skipped': skipped,
+                'sync_info': sync_message
             })
         else:
             try:
@@ -639,7 +713,8 @@ def randomize_luar_gedung_bok(request):
                 
                 return Response({
                     'message': f'Berhasil menyimpan {len(new_jadwal)} jadwal BOK',
-                    'saved': len(new_jadwal)
+                    'saved': len(new_jadwal),
+                    'sync_info': sync_message
                 })
             
             except Exception as db_error:
@@ -653,6 +728,7 @@ def randomize_luar_gedung_bok(request):
             'error': f'Gagal generate: {str(e)}',
             'traceback': traceback.format_exc()
         }, status=500)
+
 
 # ─── Randomize Jadwal Luar Gedung - Lainnya ──────────────────────────────────
 @api_view(['POST'])
@@ -679,6 +755,16 @@ def randomize_luar_gedung_lainnya(request):
     except ValueError:
         return Response({'error': 'bulan dan tahun harus angka'}, status=400)
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # AUTO SYNC HARI LIBUR (BARU)
+    # ═══════════════════════════════════════════════════════════════════════════
+    sync_success, sync_message = auto_sync_hari_libur_if_needed(tahun)
+    if not sync_success:
+        return Response({
+            'warning': sync_message,
+            'details': 'Hari libur mungkin tidak lengkap, jadwal bisa tidak akurat'
+        }, status=200)
+
     try:
         jadwal_list, skipped = generate_jadwal_luar_gedung_lainnya(bulan, tahun)
 
@@ -694,7 +780,8 @@ def randomize_luar_gedung_lainnya(request):
             return Response({
                 'message': f'Berhasil generate {len(jadwal_list)} jadwal',
                 'jadwal': jadwal_list,
-                'skipped': skipped
+                'skipped': skipped,
+                'sync_info': sync_message
             })
         else:
             try:
@@ -728,7 +815,8 @@ def randomize_luar_gedung_lainnya(request):
                 
                 return Response({
                     'message': f'Berhasil menyimpan {len(new_jadwal)} jadwal',
-                    'saved': len(new_jadwal)
+                    'saved': len(new_jadwal),
+                    'sync_info': sync_message
                 })
             
             except Exception as db_error:
@@ -742,6 +830,7 @@ def randomize_luar_gedung_lainnya(request):
             'error': f'Gagal generate: {str(e)}',
             'traceback': traceback.format_exc()
         }, status=500)
+
 
 # ─── Simpan Jadwal dengan Edit ───────────────────────────────────────────────
 @api_view(['POST'])
@@ -820,6 +909,7 @@ def hari_libur_detail(request, pk):
     elif request.method == 'DELETE':
         libur.delete()
         return Response(status=204)
+
 
 # ─── Sync Hari Libur dari API Eksternal ──────────────────────────────────────
 @api_view(['POST'])
@@ -908,6 +998,76 @@ def list_hari_libur_tahun(request, tahun):
             'tahun': tahun,
             'total': len(data),
             'hari_libur': data
+        })
+    
+    except ValueError:
+        return Response({'error': 'tahun harus angka'}, status=400)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ENDPOINT BARU: AUTO SYNC HARI LIBUR TAHUN DEPAN (BARU)
+# ═══════════════════════════════════════════════════════════════════════════════
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def auto_sync_hari_libur_tahun_depan(request):
+    """
+    Sync hari libur untuk tahun depan secara otomatis.
+    Dipanggil di akhir tahun untuk persiapan tahun depan.
+    Endpoint: POST /api/auto-sync-hari-libur-tahun-depan/
+    """
+    current_year = timezone.now().year
+    next_year = current_year + 1
+    
+    success, message = auto_sync_hari_libur_if_needed(next_year)
+    
+    if success:
+        return Response({
+            'message': message,
+            'tahun': next_year
+        })
+    else:
+        return Response({
+            'error': message,
+            'tahun': next_year
+        }, status=500)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ENDPOINT BARU: SYNC HARI LIBUR MULTI-TAHUN (BARU)
+# ═══════════════════════════════════════════════════════════════════════════════
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sync_hari_libur_range(request):
+    """
+    Sync hari libur untuk beberapa tahun sekaligus.
+    Endpoint: POST /api/sync-hari-libur-range/
+    Body: {"tahun_mulai": 2024, "tahun_akhir": 2026}
+    """
+    tahun_mulai = request.data.get('tahun_mulai')
+    tahun_akhir = request.data.get('tahun_akhir')
+    
+    if not tahun_mulai or not tahun_akhir:
+        return Response({'error': 'tahun_mulai dan tahun_akhir diperlukan'}, status=400)
+    
+    try:
+        tahun_mulai = int(tahun_mulai)
+        tahun_akhir = int(tahun_akhir)
+        
+        if tahun_mulai > tahun_akhir:
+            return Response({'error': 'tahun_mulai harus lebih kecil dari tahun_akhir'}, status=400)
+        
+        results = []
+        for tahun in range(tahun_mulai, tahun_akhir + 1):
+            success, message = auto_sync_hari_libur_if_needed(tahun)
+            results.append({
+                'tahun': tahun,
+                'success': success,
+                'message': message
+            })
+        
+        return Response({
+            'message': f'Sync selesai untuk {len(results)} tahun',
+            'results': results
         })
     
     except ValueError:

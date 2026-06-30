@@ -23,5 +23,6 @@ urlpatterns = [
     path('simpan-jadwal-with-edit/', views.simpan_jadwal_with_edit, name='simpan_jadwal_with_edit'),
     path('sync-hari-libur-api/', views.sync_hari_libur_api, name='sync-hari-libur-api'),
     path('hari-libur-tahun/<int:tahun>/', views.list_hari_libur_tahun, name='hari-libur-tahun'),
-    
+    path('auto-sync-hari-libur-tahun-depan/', views.auto_sync_hari_libur_tahun_depan, name='auto-sync-hari-libur-tahun-depan'),
+    path('sync-hari-libur-range/', views.sync_hari_libur_range, name='sync-hari-libur-range'),
 ]
