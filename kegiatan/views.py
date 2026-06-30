@@ -558,7 +558,6 @@ def randomize_dalam_gedung(request):
         }, status=500)
 
 
-# ─── Randomize Jadwal Luar Gedung - BOK ──────────────────────────────────────
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def randomize_luar_gedung_bok(request):
@@ -584,7 +583,15 @@ def randomize_luar_gedung_bok(request):
         return Response({'error': 'bulan dan tahun harus angka'}, status=400)
 
     try:
+        # Generate dengan error handling
         jadwal_list, skipped = generate_jadwal_luar_gedung_bok(bulan, tahun)
+        
+        # Cek apakah ada error di skipped
+        if skipped and any('Error' in s for s in skipped):
+            return Response({
+                'error': 'Gagal generate jadwal BOK',
+                'details': skipped[0] if skipped else 'Unknown error'
+            }, status=500)
 
         if not jadwal_list:
             return Response({
@@ -646,7 +653,6 @@ def randomize_luar_gedung_bok(request):
             'error': f'Gagal generate: {str(e)}',
             'traceback': traceback.format_exc()
         }, status=500)
-
 
 # ─── Randomize Jadwal Luar Gedung - Lainnya ──────────────────────────────────
 @api_view(['POST'])
