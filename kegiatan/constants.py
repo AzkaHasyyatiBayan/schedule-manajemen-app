@@ -10,7 +10,7 @@ DAFTAR_NAMA = [
     "Ucu Lestari, AM.Keb", "Annisa Nafaulloh,S.Tr.Keb.,Bdn",
     "Mutia Wulansari.,S.Kep.,Ners", "Ujang Effendi, S.Kep.,Ners",
     "Liska Permatasari, S.Kep.,Ners", "Dede Khaerul Kamal Muchtar, AMK",
-    "Iman Nurul Haq, A.Md.Kep", "Wida Idul Adha, S.Kep.,Ners",
+    "Iman Nurul Haq, A.Md.Kep", "Wida Idul Adha,S.Kep.,Ners",
     "Oriany Kemala Dewi, Amd.Kep", "Haeriah, A.Md.Kep",
     "Dede Aan Septiantini, A.Md.Kep", "dr.Ferry Nalapraya",
     "dr.Muhammad Azhary Romdhon", "dr.Iwan Setiawan",
@@ -102,8 +102,8 @@ RULES_DOKTER_KEGIATAN = {
 POOL_DOKTER = ['dr.Ferry Nalapraya', 'dr.Muhammad Azhary Romdhon', 'dr.Iwan Setiawan', 'dr. Siti Hana Fukui', 'dr. Volti Diana Suryawadi', 'Mutia Wulansari.,S.Kep.,Ners', 'Ujang Effendi, S.Kep.,Ners', 'Liska Permatasari, S.Kep.,Ners', 'Wida Idul Adha, S.Kep.,Ners']
 POOL_DOKTER_KIA = ['dr.Ferry Nalapraya', 'dr.Muhammad Azhary Romdhon', 'dr.Iwan Setiawan']
 POOL_BIDAN = ['Bdn. Yeni Yulyani Setianingsih, S.ST', 'Bdn. Nina Ainun, S.Tr.Keb', 'Rita Sahara, S.Tr.Keb', 'Dewi Sri Mulyani, Am.Keb', 'Pipit Puspitasari, Am.Keb', 'Mira Jatnikawati, Am.Keb', 'Reni Mustikasari, Am.Keb', 'Alitsa Nuur Fithri, S.ST', 'Yesi Apriyani, Am.Keb', 'Asri Awulan, S.Tr.Keb', 'Pia Nur Podiana, A.Md.Keb', 'Intang Sri Purnama, AM.Keb', 'Ucu Lestari, AM.Keb', 'Annisa Nafaulloh,S.Tr.Keb.,Bdn']
-POOL_ILP = ['Mutia Wulansari.,S.Kep.,Ners', 'Liska Permatasari, S.Kep.,Ners', 'Dede Khaerul Kamal Muchtar, AMK', 'Iman Nurul Haq, A.Md.Kep', 'Wida Idul Adha, S.Kep.,Ners', 'Oriany Kemala Dewi, Amd.Kep', 'Dede Aan Septiantini, A.Md.Kep', 'Bdn. Yeni Yulyani Setianingsih, S.ST', 'Bdn. Nina Ainun, S.Tr.Keb', 'Rita Sahara, S.Tr.Keb', 'Dewi Sri Mulyani, Am.Keb', 'Pipit Puspitasari, Am.Keb', 'Mira Jatnikawati, Am.Keb', 'Reni Mustikasari, Am.Keb', 'Alitsa Nuur Fithri, S.ST', 'Yesi Apriyani, Am.Keb', 'Asri Awulan, S.Tr.Keb', 'Pia Nur Podiana, A.Md.Keb', 'Intang Sri Purnama, AM.Keb', 'Ucu Lestari, AM.Keb', 'Annisa Nafaulloh,S.Tr.Keb.,Bdn', 'Rudi Sutikno, SKM', 'Eko Wahyu Saputro, S.K.M', 'Nurul Hasanah, A.Md.KL', 'Ameilia Putri Isyari, S.Gz', 'Annisa Fauziah, A.Md.Gz']
-POOL_TINDAKAN = ['Mutia Wulansari.,S.Kep.,Ners', 'Liska Permatasari, S.Kep.,Ners', 'Dede Khaerul Kamal Muchtar, AMK', 'Iman Nurul Haq, A.Md.Kep', 'Wida Idul Adha, S.Kep.,Ners', 'Oriany Kemala Dewi, Amd.Kep', 'Dede Aan Septiantini, A.Md.Kep']
+POOL_ILP = ['Mutia Wulansari.,S.Kep.,Ners', 'Liska Permatasari, S.Kep.,Ners', 'Dede Khaerul Kamal Muchtar, AMK', 'Iman Nurul Haq, A.Md.Kep', 'Wida Idul Adha,S.Kep.,Ners', 'Oriany Kemala Dewi, Amd.Kep', 'Dede Aan Septiantini, A.Md.Kep', 'Bdn. Yeni Yulyani Setianingsih, S.ST', 'Bdn. Nina Ainun, S.Tr.Keb', 'Rita Sahara, S.Tr.Keb', 'Dewi Sri Mulyani, Am.Keb', 'Pipit Puspitasari, Am.Keb', 'Mira Jatnikawati, Am.Keb', 'Reni Mustikasari, Am.Keb', 'Alitsa Nuur Fithri, S.ST', 'Yesi Apriyani, Am.Keb', 'Asri Awulan, S.Tr.Keb', 'Pia Nur Podiana, A.Md.Keb', 'Intang Sri Purnama, AM.Keb', 'Ucu Lestari, AM.Keb', 'Annisa Nafaulloh,S.Tr.Keb.,Bdn', 'Rudi Sutikno, SKM', 'Eko Wahyu Saputro, S.K.M', 'Nurul Hasanah, A.Md.KL', 'Ameilia Putri Isyari, S.Gz', 'Annisa Fauziah, A.Md.Gz']
+POOL_TINDAKAN = ['Mutia Wulansari.,S.Kep.,Ners', 'Liska Permatasari, S.Kep.,Ners', 'Dede Khaerul Kamal Muchtar, AMK', 'Iman Nurul Haq, A.Md.Kep', 'Wida Idul Adha,S.Kep.,Ners', 'Oriany Kemala Dewi, Amd.Kep', 'Dede Aan Septiantini, A.Md.Kep']
 LOKA_KARYA_MINI = ['Dewi Sri Mulyani, Am.Keb', 'Pipit Puspitasari, Am.Keb', 'Mira Jatnikawati, Am.Keb', 'Reni Mustikasari, Am.Keb', 'Asri Awulan, S.Tr.Keb', 'Ujang Effendi, S.Kep.,Ners', 'Haeriah, A.Md.Kep']
 
 # ─── POOL DALAM GEDUNG (FILTERED - TANPA UJANG & HAERIAH) ─────────────────────
@@ -114,14 +114,14 @@ LOKA_KARYA_MINI_F = [n for n in LOKA_KARYA_MINI if n not in NAMA_HANYA_PUSTU]
 
 # ─── POOL LUAR GEDUNG ────────────────────────────────────────────────────────
 POOL_PETUGAS_DOKTER_GIGI = ['dr.Ferry Nalapraya', 'drg.Rifan Hanggoro.M.M.R.S']
-POOL_PETUGAS_BIDAN_PERAWAT = ['Bdn. Yeni Yulyani Setianingsih, S.ST', 'Bdn. Nina Ainun, S.Tr.Keb', 'Rita Sahara, S.Tr.Keb', 'Dewi Sri Mulyani, Am.Keb', 'Pipit Puspitasari, Am.Keb', 'Mira Jatnikawati, Am.Keb', 'Reni Mustikasari, Am.Keb', 'Alitsa Nuur Fithri, S.ST', 'Yesi Apriyani, Am.Keb', 'Asri Awulan, S.Tr.Keb', 'Pia Nur Podiana, A.Md.Keb', 'Mutia Wulansari.,S.Kep.,Ners', 'Ujang Effendi, S.Kep.,Ners', 'Liska Permatasari, S.Kep.,Ners', 'Dede Khaerul Kamal Muchtar, AMK', 'Iman Nurul Haq, A.Md.Kep', 'Wida Idul Adha, S.Kep.,Ners', 'Oriany Kemala Dewi, Amd.Kep', 'Haeriah, A.Md.Kep', 'Annisa Fauziah, A.Md.Gz']
+POOL_PETUGAS_BIDAN_PERAWAT = ['Bdn. Yeni Yulyani Setianingsih, S.ST', 'Bdn. Nina Ainun, S.Tr.Keb', 'Rita Sahara, S.Tr.Keb', 'Dewi Sri Mulyani, Am.Keb', 'Pipit Puspitasari, Am.Keb', 'Mira Jatnikawati, Am.Keb', 'Reni Mustikasari, Am.Keb', 'Alitsa Nuur Fithri, S.ST', 'Yesi Apriyani, Am.Keb', 'Asri Awulan, S.Tr.Keb', 'Pia Nur Podiana, A.Md.Keb', 'Mutia Wulansari.,S.Kep.,Ners', 'Ujang Effendi, S.Kep.,Ners', 'Liska Permatasari, S.Kep.,Ners', 'Dede Khaerul Kamal Muchtar, AMK', 'Iman Nurul Haq, A.Md.Kep', 'Wida Idul Adha,S.Kep.,Ners', 'Oriany Kemala Dewi, Amd.Kep', 'Haeriah, A.Md.Kep', 'Annisa Fauziah, A.Md.Gz']
 POOL_PETUGAS_SANITARIAN = ['Isep Suhendar,SKM', 'Eko Wahyu Saputro, S.K.M', 'Rudi Sutikno, SKM']
 POOL_PETUGAS_STBM = ['Eko Wahyu Saputro, S.K.M', 'Nurul Hasanah, A.Md.KL', 'Rudi Sutikno, SKM']
 LOKASI_LUAR_GEDUNG = ['Tamanjaya', 'Tamansari', 'Sumelap', 'Mugarsari']
 
 # ─── JADWAL FIXED POSYANDU ──────────────────────────────────────────────────
 JADWAL_POSYANDU_FIXED = {
-    'Posyandu Cieurih': {'hari': 0, 'minggu_ke': 1, 'kelurahan': 'Sumelap', 'petugas': ['Asri Awulan, S.Tr.Keb'], 'penyerta': ['Wida Idul Adha, S.Kep.,Ners']},
+    'Posyandu Cieurih': {'hari': 0, 'minggu_ke': 1, 'kelurahan': 'Sumelap', 'petugas': ['Asri Awulan, S.Tr.Keb'], 'penyerta': ['Wida Idul Adha,S.Kep.,Ners']},
     'Posyandu Liunggunung': {'hari': 1, 'minggu_ke': 1, 'kelurahan': 'Sumelap', 'petugas': ['Asri Awulan, S.Tr.Keb'], 'penyerta': ['Dede Khaerul Kamal Muchtar, AMK']},
     'Posyandu Kadupandak': {'hari': 2, 'minggu_ke': 1, 'kelurahan': 'Sumelap', 'petugas': ['Asri Awulan, S.Tr.Keb'], 'penyerta': ['Oriany Kemala Dewi, Amd.Kep']},
     'Posyandu Perum Puri Sumelap': {'hari': 0, 'minggu_ke': 2, 'kelurahan': 'Sumelap', 'petugas': ['Asri Awulan, S.Tr.Keb'], 'penyerta': []},
@@ -145,9 +145,9 @@ JADWAL_POSYANDU_FIXED = {
     'Posyandu Cidahu': {'hari': 1, 'minggu_ke': 3, 'kelurahan': 'Tamanjaya', 'petugas': ['Pipit Puspitasari, Am.Keb'], 'penyerta': ['Oriany Kemala Dewi, Amd.Kep']},
     'Posyandu Perum Nusa Indah': {'hari': 2, 'minggu_ke': 3, 'kelurahan': 'Tamanjaya', 'petugas': ['Pipit Puspitasari, Am.Keb'], 'penyerta': ['Liska Permatasari, S.Kep.,Ners']},
     'Posyandu Bantarsari': {'hari': 3, 'minggu_ke': 3, 'kelurahan': 'Tamanjaya', 'petugas': ['Pipit Puspitasari, Am.Keb'], 'penyerta': ['Iman Nurul Haq, A.Md.Kep']},
-    'Posyandu Selaawi': {'hari': 1, 'minggu_ke': 1, 'kelurahan': 'Mugarsari', 'petugas': ['Dewi Sri Mulyani, Am.Keb'], 'penyerta': ['Wida Idul Adha, S.Kep.,Ners']},
+    'Posyandu Selaawi': {'hari': 1, 'minggu_ke': 1, 'kelurahan': 'Mugarsari', 'petugas': ['Dewi Sri Mulyani, Am.Keb'], 'penyerta': ['Wida Idul Adha,S.Kep.,Ners']},
     'Posyandu Sidamulih': {'hari': 3, 'minggu_ke': 1, 'kelurahan': 'Mugarsari', 'petugas': ['Dewi Sri Mulyani, Am.Keb'], 'penyerta': ['Bdn. Nina Ainun, S.Tr.Keb']},
-    'Posyandu Bbk.Cipasung': {'hari': 1, 'minggu_ke': 2, 'kelurahan': 'Mugarsari', 'petugas': ['Dewi Sri Mulyani, Am.Keb'], 'penyerta': ['Wida Idul Adha, S.Kep.,Ners']},
+    'Posyandu Bbk.Cipasung': {'hari': 1, 'minggu_ke': 2, 'kelurahan': 'Mugarsari', 'petugas': ['Dewi Sri Mulyani, Am.Keb'], 'penyerta': ['Wida Idul Adha,S.Kep.,Ners']},
     'Posyandu Nangela': {'hari': 2, 'minggu_ke': 2, 'kelurahan': 'Mugarsari', 'petugas': ['Dewi Sri Mulyani, Am.Keb'], 'penyerta': ['Bdn. Nina Ainun, S.Tr.Keb']},
     'Posyandu Jatiwangi': {'hari': 3, 'minggu_ke': 2, 'kelurahan': 'Mugarsari', 'petugas': ['Dewi Sri Mulyani, Am.Keb'], 'penyerta': []},
     'Posyandu Cipasung': {'hari': 1, 'minggu_ke': 3, 'kelurahan': 'Mugarsari', 'petugas': ['Dewi Sri Mulyani, Am.Keb'], 'penyerta': ['Ujang Effendi, S.Kep.,Ners']},
