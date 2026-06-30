@@ -736,6 +736,105 @@ def randomize_luar_gedung_lainnya(request):
             'error': f'Gagal generate: {str(e)}',
             'traceback': traceback.format_exc()
         }, status=500)
+    
+# ─── Randomize Jadwal Sekolah/Pesantren ──────────────────────────────────────
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def randomize_sekolah(request):
+    """Generate jadwal luar gedung kategori Sekolah/Pesantren"""
+    try:
+        from .randomize_logic import (
+            generate_jadwal_sekolah, 
+            generate_jadwal_luar_gedung_lainnya,
+            generate_jadwal_luar_gedung_bok,
+            generate_jadwal_dalam_gedung
+        )
+    except ImportError as e:
+        return Response({
+            'error': f'Import error: {str(e)}',
+            'traceback': traceback.format_exc()
+        }, status=500)
+    
+    bulan = request.data.get('bulan')
+    tahun = request.data.get('tahun')
+    loka_karya = request.data.get('loka_karya', False)
+    
+    if not all([bulan, tahun]):
+        return Response({'error': 'bulan dan tahun diperlukan'}, status=400)
+
+    try:
+        bulan = int(bulan)
+        tahun = int(tahun)
+    except ValueError:
+        return Response({'error': 'bulan dan tahun harus angka'}, status=400)
+
+    try:
+        # Generate secara bertahap untuk menghindari duplikasi petugas
+        jadwal_dalam, _ = generate_jadwal_dalam_gedung(bulan, tahun, loka_karya)
+        jadwal_bok, _ = generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam)
+        jadwal_lainnya, _ = generate_jadwal_luar_gedung_lainnya(bulan, tahun, jadwal_bok, jadwal_dalam)
+        jadwal_list, skipped = generate_jadwal_sekolah(bulan, tahun, jadwal_lainnya + jadwal_bok + jadwal_dalam)
+
+        if not jadwal_list:
+            return Response({
+                'error': 'Gagal generate jadwal sekolah',
+                'skipped': skipped
+            }, status=400)
+
+        preview = request.data.get('preview', True)
+
+        if preview:
+            return Response({
+                'message': f'Berhasil generate {len(jadwal_list)} jadwal sekolah',
+                'jadwal': jadwal_list,
+                'skipped': skipped
+            })
+        else:
+            try:
+                with transaction.atomic():
+                    existing_keys = set(
+                        Kegiatan.objects.filter(
+                            tanggal__in=[j['tanggal'] for j in jadwal_list]
+                        ).values_list('tanggal', 'lokasi', 'kegiatan')
+                    )
+                    
+                    new_jadwal = [
+                        j for j in jadwal_list
+                        if (j['tanggal'], j['lokasi'], j['kegiatan']) not in existing_keys
+                    ]
+                    
+                    objects_to_create = [
+                        Kegiatan(
+                            tanggal=j['tanggal'],
+                            lokasi=j['lokasi'],
+                            kegiatan=j['kegiatan'],
+                            penyerta=j['penyerta'],
+                            kategori='luar_gedung',
+                            sub_kategori='sekolah',
+                            is_auto_generated=True,
+                            source='randomize'
+                        )
+                        for j in new_jadwal
+                    ]
+                    
+                    Kegiatan.objects.bulk_create(objects_to_create, batch_size=100)
+                
+                return Response({
+                    'message': f'Berhasil menyimpan {len(new_jadwal)} jadwal sekolah',
+                    'saved': len(new_jadwal)
+                })
+            
+            except Exception as db_error:
+                return Response({
+                    'error': f'Gagal menyimpan: {str(db_error)}',
+                    'traceback': traceback.format_exc()
+                }, status=500)
+    
+    except Exception as e:
+        return Response({
+            'error': f'Gagal generate: {str(e)}',
+            'traceback': traceback.format_exc()
+        }, status=500)
 
 
 # ─── Simpan Jadwal dengan Edit ───────────────────────────────────────────────

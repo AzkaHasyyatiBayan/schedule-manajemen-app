@@ -8,11 +8,18 @@ from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-!3y)l$s5z2t8hxj4n#+*+_z-^cwgz=qb&io5^zs9amou!8ae=e'
+# ─── SECURITY SETTINGS (Bisa di-override via Environment Variables) ──────────
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY',
+    'django-insecure-!3y)l$s5z2t8hxj4n#+*+_z-^cwgz=qb&io5^zs9amou!8ae=e'
+)
 
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = os.environ.get(
+    'DJANGO_ALLOWED_HOSTS',
+    'localhost,127.0.0.1,web-production-dc35a.up.railway.app'
+).split(',')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -28,10 +35,11 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # ← HARUS PALING ATAS
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -62,7 +70,8 @@ if os.environ.get('DATABASE_URL'):
     DATABASES = {
         'default': dj_database_url.config(
             default=os.environ['DATABASE_URL'],
-            conn_max_age=600
+            conn_max_age=600,
+            ssl_require=True  # ← TAMBAHKAN INI untuk Neon/PostgreSQL cloud
         )
     }
 else:
@@ -109,10 +118,54 @@ REST_FRAMEWORK = {
     },
 }
 
+# ─── CORS SETTINGS (WAJIB untuk connect dari Vercel) ─────────────────────────
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
+    'http://localhost:8501',
+    'http://127.0.0.1:8501',
+    'https://schedule-sangkali.vercel.app',  # ← TAMBAHKAN INI (DOMAIN VERCEL)
 ]
+
+# Jika mau support preview deployments di Vercel (*.vercel.app)
+CORS_ALLOW_ALL_ORIGINS = False  # ← Tetap False untuk keamanan
+
 CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# ─── CSRF SETTINGS (WAJIB untuk POST request dari Vercel) ────────────────────
+CSRF_TRUSTED_ORIGINS = [
+    'https://schedule-sangkali.vercel.app',  # ← TAMBAHKAN INI
+    'http://localhost:3000',
+    'https://web-production-dc35a.up.railway.app',  # Railway domain
+]
+
+# ─── SESSION & COOKIE SETTINGS (untuk HTTPS) ─────────────────────────────────
+if not DEBUG:
+    # Production settings
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = False  # Railway sudah handle HTTPS
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 APPEND_SLASH = True
