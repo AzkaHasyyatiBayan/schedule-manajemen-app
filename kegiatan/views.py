@@ -820,3 +820,95 @@ def hari_libur_detail(request, pk):
     elif request.method == 'DELETE':
         libur.delete()
         return Response(status=204)
+
+# ─── Sync Hari Libur dari API Eksternal ──────────────────────────────────────
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sync_hari_libur_api(request):
+    """
+    Sync hari libur nasional Indonesia dari Nager.Date API
+    Endpoint: POST /api/sync-hari-libur-api/
+    Body: {"tahun": 2026}
+    """
+    tahun = request.data.get('tahun')
+    
+    if not tahun:
+        return Response({'error': 'tahun diperlukan'}, status=400)
+    
+    try:
+        tahun = int(tahun)
+    except ValueError:
+        return Response({'error': 'tahun harus angka'}, status=400)
+    
+    try:
+        # Fetch dari Nager.Date API (gratis, no API key)
+        url = f"https://date.nager.at/api/v3/PublicHolidays/{tahun}/ID"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        holidays = response.json()
+        created_count = 0
+        skipped_count = 0
+        
+        for holiday in holidays:
+            tanggal = holiday['date']  # Format: '2026-01-01'
+            nama_libur = holiday.get('localName', holiday.get('name', 'Hari Libur'))
+            
+            # Cek apakah sudah ada di database
+            if HariLibur.objects.filter(tanggal=tanggal).exists():
+                skipped_count += 1
+                continue
+            
+            # Tentukan jenis libur
+            jenis = 'nasional'
+            if 'Cuti Bersama' in nama_libur or 'Joint Holiday' in nama_libur:
+                jenis = 'cuti_bersama'
+            
+            HariLibur.objects.create(
+                tanggal=tanggal,
+                keterangan=nama_libur,
+                jenis=jenis
+            )
+            created_count += 1
+        
+        return Response({
+            'message': f'Sinkronisasi hari libur tahun {tahun} berhasil',
+            'created': created_count,
+            'skipped': skipped_count,
+            'total': len(holidays)
+        })
+    
+    except requests.exceptions.Timeout:
+        return Response({'error': 'Timeout saat mengakses API'}, status=504)
+    except requests.exceptions.HTTPError as e:
+        return Response({'error': f'API error: {str(e)}'}, status=502)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+# ─── List Hari Libur per Tahun ───────────────────────────────────────────────
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_hari_libur_tahun(request, tahun):
+    """
+    List semua hari libur di tahun tertentu
+    Endpoint: GET /api/hari-libur-tahun/2026/
+    """
+    try:
+        tahun = int(tahun)
+        libur_list = HariLibur.objects.filter(tanggal__year=tahun).order_by('tanggal')
+        
+        data = [{
+            'tanggal': str(l.tanggal),
+            'keterangan': l.keterangan,
+            'jenis': l.jenis
+        } for l in libur_list]
+        
+        return Response({
+            'tahun': tahun,
+            'total': len(data),
+            'hari_libur': data
+        })
+    
+    except ValueError:
+        return Response({'error': 'tahun harus angka'}, status=400)

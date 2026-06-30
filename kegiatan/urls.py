@@ -21,4 +21,7 @@ urlpatterns = [
     path('randomize-luar-gedung-bok/', views.randomize_luar_gedung_bok, name='randomize_luar_gedung_bok'),
     path('randomize-luar-gedung-lainnya/', views.randomize_luar_gedung_lainnya, name='randomize_luar_gedung_lainnya'),
     path('simpan-jadwal-with-edit/', views.simpan_jadwal_with_edit, name='simpan_jadwal_with_edit'),
+    path('sync-hari-libur-api/', views.sync_hari_libur_api, name='sync-hari-libur-api'),
+    path('hari-libur-tahun/<int:tahun>/', views.list_hari_libur_tahun, name='hari-libur-tahun'),
+    
 ]
