@@ -60,7 +60,8 @@ CUTI_KHUSUS = {
 
 # ─── DOKTER WAJIB DI KEGIATAN TERTENTU PADA HARI TERTENTU ────────────────────
 # Format: {nama_kegiatan: {hari_idx: nama_dokter}}
-# hari_idx: 0=Senin, 1=Selasa, 2=Rabu, 3=Kamis, 4=Jumat, 5=Sabtu, 6=Minggu
+# hari_idx: 0=Senin, 1=Selasa, 2=Rabu, 3=Kamis, 4=Jumat, 5=Sabtu
+# Logika: Jika hari ini ada di dict, dokter tersebut WAJIB masuk
 DOKTER_WAJIB_KEGIATAN = {
     'KLASTER DEWASA-LANSIA 1': {
         0: 'dr. Volti Diana Suryawadi',  # Senin WAJIB
@@ -70,24 +71,30 @@ DOKTER_WAJIB_KEGIATAN = {
         5: 'dr. Volti Diana Suryawadi',  # Sabtu WAJIB
         3: 'dr. Siti Hana Fukui',        # Kamis WAJIB
     },
+    'KLASTER IBU KIA & USG': {
+        0: 'dr.Muhammad Azhary Romdhon',  # Senin WAJIB
+        2: 'dr.Muhammad Azhary Romdhon',  # Rabu WAJIB
+        1: 'dr.Ferry Nalapraya',          # Selasa WAJIB
+        3: 'dr.Ferry Nalapraya',          # Kamis WAJIB
+    },
 }
 
-# ─── RULES DOKTER (STRICT SESUAI DOKUMEN TERBARU) ────────────────────────────
-# Rules ini hanya untuk MEMBATASI dokter, bukan memaksa
+# ─── RULES DOKTER (BATASAN - dokter hanya boleh di hari tertentu) ─────────────
+# Logika: Jika dokter ada di dict untuk kegiatan ini, dia HANYA boleh di hari yang tertera
 RULES_DOKTER_KEGIATAN = {
     'dr. Volti Diana Suryawadi': {
-        'KLASTER DEWASA-LANSIA 1': [0],  # Hanya boleh di Senin
-        'KLASTER DEWASA-LANSIA 2': [5],  # Hanya boleh di Sabtu
+        'KLASTER DEWASA-LANSIA 1': [0],  # Hanya boleh Senin
+        'KLASTER DEWASA-LANSIA 2': [5],  # Hanya boleh Sabtu
     },
     'dr. Siti Hana Fukui': {
-        'KLASTER DEWASA-LANSIA 1': [1],  # Hanya boleh di Selasa
-        'KLASTER DEWASA-LANSIA 2': [3],  # Hanya boleh di Kamis
+        'KLASTER DEWASA-LANSIA 1': [1],  # Hanya boleh Selasa
+        'KLASTER DEWASA-LANSIA 2': [3],  # Hanya boleh Kamis
     },
     'dr.Muhammad Azhary Romdhon': {
-        'KLASTER IBU KIA & USG': [0, 2],  # Senin & Rabu SAJA
+        'KLASTER IBU KIA & USG': [0, 2],  # Hanya boleh Senin & Rabu
     },
     'dr.Ferry Nalapraya': {
-        'KLASTER IBU KIA & USG': [1, 3],  # Selasa & Kamis SAJA
+        'KLASTER IBU KIA & USG': [1, 3],  # Hanya boleh Selasa & Kamis
     },
 }
 
@@ -123,6 +130,7 @@ JADWAL_POSYANDU_FIXED = {
     'Posyandu Sukaasih': {'hari': 0, 'minggu_ke': 3, 'kelurahan': 'Sumelap', 'petugas': ['Asri Awulan, S.Tr.Keb'], 'penyerta': ['Ucu Lestari, AM.Keb']},
     'Posyandu Perum Sukawening': {'hari': 1, 'minggu_ke': 3, 'kelurahan': 'Sumelap', 'petugas': ['Asri Awulan, S.Tr.Keb'], 'penyerta': ['Ucu Lestari, AM.Keb']},
     'Posyandu Cigintung': {'hari': 2, 'minggu_ke': 3, 'kelurahan': 'Sumelap', 'petugas': ['Asri Awulan, S.Tr.Keb'], 'penyerta': ['Annisa Nafaulloh,S.Tr.Keb.,Bdn']},
+    'Posyandu Ciharashas': {'hari': 0, 'minggu_ke': 1, 'kelurahan': 'Sumelap', 'petugas': ['Asri Awulan, S.Tr.Keb'], 'penyerta': []},
     'Posyandu Kubangsari': {'hari': 0, 'minggu_ke': 1, 'kelurahan': 'Tamanjaya', 'petugas': ['Pipit Puspitasari, Am.Keb'], 'penyerta': ['Dede Aan Septiantini, A.Md.Kep']},
     'Posyandu Malingping': {'hari': 1, 'minggu_ke': 1, 'kelurahan': 'Tamanjaya', 'petugas': ['Pipit Puspitasari, Am.Keb'], 'penyerta': ['Iman Nurul Haq, A.Md.Kep']},
     'Posyandu Sindangreret': {'hari': 2, 'minggu_ke': 1, 'kelurahan': 'Tamanjaya', 'petugas': ['Pipit Puspitasari, Am.Keb'], 'penyerta': ['Alitsa Nuur Fithri, S.ST']},
@@ -195,6 +203,9 @@ DAFTAR_SEKOLAH_PESANTREN = [
     'Miftahul Khoer Al-Musri II', 'Miftahul Ihsan', 'Al-Abror', 'Cilampahan'
 ]
 
+# ─── WAJIB SEKOLAH (3 orang yang harus ada di setiap kegiatan sekolah) ────────
+WAJIB_SEKOLAH = ['drg.Rifan Hanggoro.M.M.R.S', 'Endah Setiawati,S.Tr.Kes', 'Annisa Fauziah, A.Md.Gz']
+
 # ─── DEFINISI KEGIATAN BOK (31 kegiatan + Sekolah/Pesantren) ─────────────────
 KEGIATAN_BOK = {
     'Pelacakan dan pengawasan minum obat untuk ODGJ Berat': {'freq': 25, 'petugas': POOL_PETUGAS_DOKTER_GIGI, 'penyerta': ['Bdn. Yeni Yulyani Setianingsih, S.ST', 'Bdn. Nina Ainun, S.Tr.Keb', 'Rita Sahara, S.Tr.Keb', 'Dewi Sri Mulyani, Am.Keb', 'Pipit Puspitasari, Am.Keb', 'Mira Jatnikawati, Am.Keb', 'Reni Mustikasari, Am.Keb', 'Alitsa Nuur Fithri, S.ST', 'Yesi Apriyani, Am.Keb', 'Asri Awulan, S.Tr.Keb', 'Pia Nur Podiana, A.Md.Keb', 'Dede Khaerul Kamal Muchtar, AMK'], 'allow_double_dalam': True, 'allow_double_luar': False},
@@ -228,8 +239,9 @@ KEGIATAN_BOK = {
     'Penyelidikan Epidimiologi Penyakit Arbovirosis': {'freq': 4, 'petugas': ['Iman Nurul Haq, A.Md.Kep'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'allow_double_dalam': True, 'allow_double_luar': False},
     'Penyelidikan Epidimiologi Penyakit Zoonosis': {'freq': 2, 'petugas': ['Iman Nurul Haq, A.Md.Kep'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'allow_double_dalam': True, 'allow_double_luar': False},
     'Pendampingan pelaksanaan ILP di pustu dan Unit Pelayanan Kesehatan Desa/Kelurahan (UPKD/K)': {'freq': 1, 'petugas': ['Rudi Sutikno, SKM'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'allow_double_dalam': False, 'allow_double_luar': False},
-    'Skrining Kesehatan di Sekolah': {'freq': 4, 'petugas': ['drg.Rifan Hanggoro.M.M.R.S'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'count_penyerta': 3, 'allow_double_dalam': False, 'allow_double_luar': False, 'is_sekolah': True},
-    'Pembinaan Kesehatan di Sekolah': {'freq': 4, 'petugas': ['Rudi Sutikno, SKM'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'allow_double_dalam': False, 'allow_double_luar': False, 'is_sekolah': True},
+    # ─── SEKOLAH/PESANTREN (MASUK BOK) ──────────────────────────────────────
+    'Skrining Kesehatan di Sekolah': {'freq': 4, 'petugas': WAJIB_SEKOLAH, 'penyerta': POOL_BIDAN, 'count_penyerta': 1, 'allow_double_dalam': False, 'allow_double_luar': False, 'is_sekolah': True, 'wajib': WAJIB_SEKOLAH},
+    'Pembinaan Kesehatan di Sekolah': {'freq': 4, 'petugas': ['Rudi Sutikno, SKM'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'allow_double_dalam': False, 'allow_double_luar': False, 'is_sekolah': True, 'paket_dengan': 'Skrining Kesehatan di Sekolah'},
 }
 
 # ─── KEGIATAN POSYANDU/POSBINDU/UKK/POS REMAJA ──────────────────────────────
