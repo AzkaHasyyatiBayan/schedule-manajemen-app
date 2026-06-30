@@ -58,15 +58,30 @@ CUTI_KHUSUS = {
     'dr.Iwan Setiawan': [5],  # Sabtu
 }
 
+# ─── DOKTER WAJIB DI KEGIATAN TERTENTU PADA HARI TERTENTU ────────────────────
+# Format: {nama_kegiatan: {hari_idx: nama_dokter}}
+# hari_idx: 0=Senin, 1=Selasa, 2=Rabu, 3=Kamis, 4=Jumat, 5=Sabtu, 6=Minggu
+DOKTER_WAJIB_KEGIATAN = {
+    'KLASTER DEWASA-LANSIA 1': {
+        0: 'dr. Volti Diana Suryawadi',  # Senin WAJIB
+        1: 'dr. Siti Hana Fukui',        # Selasa WAJIB
+    },
+    'KLASTER DEWASA-LANSIA 2': {
+        5: 'dr. Volti Diana Suryawadi',  # Sabtu WAJIB
+        3: 'dr. Siti Hana Fukui',        # Kamis WAJIB
+    },
+}
+
 # ─── RULES DOKTER (STRICT SESUAI DOKUMEN TERBARU) ────────────────────────────
+# Rules ini hanya untuk MEMBATASI dokter, bukan memaksa
 RULES_DOKTER_KEGIATAN = {
     'dr. Volti Diana Suryawadi': {
-        'KLASTER DEWASA-LANSIA 1': [0],  # Senin SAJA
-        'KLASTER DEWASA-LANSIA 2': [5],  # Sabtu SAJA
+        'KLASTER DEWASA-LANSIA 1': [0],  # Hanya boleh di Senin
+        'KLASTER DEWASA-LANSIA 2': [5],  # Hanya boleh di Sabtu
     },
     'dr. Siti Hana Fukui': {
-        'KLASTER DEWASA-LANSIA 1': [1],  # Selasa SAJA
-        'KLASTER DEWASA-LANSIA 2': [3],  # Kamis SAJA
+        'KLASTER DEWASA-LANSIA 1': [1],  # Hanya boleh di Selasa
+        'KLASTER DEWASA-LANSIA 2': [3],  # Hanya boleh di Kamis
     },
     'dr.Muhammad Azhary Romdhon': {
         'KLASTER IBU KIA & USG': [0, 2],  # Senin & Rabu SAJA
@@ -85,7 +100,6 @@ POOL_TINDAKAN = ['Mutia Wulansari.,S.Kep.,Ners', 'Liska Permatasari, S.Kep.,Ners
 LOKA_KARYA_MINI = ['Dewi Sri Mulyani, Am.Keb', 'Pipit Puspitasari, Am.Keb', 'Mira Jatnikawati, Am.Keb', 'Reni Mustikasari, Am.Keb', 'Asri Awulan, S.Tr.Keb', 'Ujang Effendi, S.Kep.,Ners', 'Haeriah, A.Md.Kep']
 
 # ─── POOL DALAM GEDUNG (FILTERED - TANPA UJANG & HAERIAH) ─────────────────────
-# Pool ini digunakan untuk kegiatan dalam gedung SELAIN Pustu
 POOL_DOKTER_F = [n for n in POOL_DOKTER if n not in NAMA_HANYA_PUSTU]
 POOL_ILP_F = [n for n in POOL_ILP if n not in NAMA_HANYA_PUSTU]
 POOL_TINDAKAN_F = [n for n in POOL_TINDAKAN if n not in NAMA_HANYA_PUSTU]
@@ -214,7 +228,6 @@ KEGIATAN_BOK = {
     'Penyelidikan Epidimiologi Penyakit Arbovirosis': {'freq': 4, 'petugas': ['Iman Nurul Haq, A.Md.Kep'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'allow_double_dalam': True, 'allow_double_luar': False},
     'Penyelidikan Epidimiologi Penyakit Zoonosis': {'freq': 2, 'petugas': ['Iman Nurul Haq, A.Md.Kep'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'allow_double_dalam': True, 'allow_double_luar': False},
     'Pendampingan pelaksanaan ILP di pustu dan Unit Pelayanan Kesehatan Desa/Kelurahan (UPKD/K)': {'freq': 1, 'petugas': ['Rudi Sutikno, SKM'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'allow_double_dalam': False, 'allow_double_luar': False},
-    # ─── SEKOLAH/PESANTREN (MASUK BOK) ──────────────────────────────────────
     'Skrining Kesehatan di Sekolah': {'freq': 4, 'petugas': ['drg.Rifan Hanggoro.M.M.R.S'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'count_penyerta': 3, 'allow_double_dalam': False, 'allow_double_luar': False, 'is_sekolah': True},
     'Pembinaan Kesehatan di Sekolah': {'freq': 4, 'petugas': ['Rudi Sutikno, SKM'], 'penyerta': POOL_PETUGAS_BIDAN_PERAWAT, 'allow_double_dalam': False, 'allow_double_luar': False, 'is_sekolah': True},
 }

@@ -1,8 +1,12 @@
 import random
 import calendar
+import logging
 from datetime import datetime, timedelta, date
 from .models import Kegiatan, HariLibur
 from .constants import *
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 
 def fn_local(nama_list):
@@ -39,16 +43,34 @@ def cek_piket_malam_sebelumnya(tanggal_obj):
 
 
 def cek_hari_libur(tanggal_obj):
-    """Cek apakah tanggal tersebut hari libur (support date dan datetime)"""
-    # Normalisasi ke date object
-    if hasattr(tanggal_obj, 'date'):
+    """Cek apakah tanggal tersebut hari libur (FIXED: pastikan date object)"""
+    # Normalisasi ke date object (BUKAN datetime)
+    if hasattr(tanggal_obj, 'date') and callable(tanggal_obj.date):
         check_date = tanggal_obj.date()
-    elif isinstance(tanggal_obj, date):
+    elif isinstance(tanggal_obj, date) and not isinstance(tanggal_obj, datetime):
         check_date = tanggal_obj
     else:
-        check_date = datetime.strptime(str(tanggal_obj), '%Y-%m-%d').date()
+        try:
+            check_date = datetime.strptime(str(tanggal_obj), '%Y-%m-%d').date()
+        except:
+            check_date = tanggal_obj
     
-    return HariLibur.objects.filter(tanggal=check_date).exists()
+    # Query dengan date object
+    is_libur = HariLibur.objects.filter(tanggal=check_date).exists()
+    
+    # Logging untuk debug
+    if is_libur:
+        logger.info(f"🔴 Tanggal {check_date} adalah hari libur")
+    
+    return is_libur
+
+
+def get_hari_libur_bulan(bulan, tahun):
+    """Dapatkan semua hari libur di bulan tertentu (untuk debug)"""
+    start_date = date(tahun, bulan, 1)
+    end_date = date(tahun, bulan, calendar.monthrange(tahun, bulan)[1])
+    libur_list = HariLibur.objects.filter(tanggal__range=[start_date, end_date])
+    return [str(l.tanggal) for l in libur_list]
 
 
 def rpf(pool, count, used_today, used_month, tanggal_obj, kegiatan=None):
@@ -67,14 +89,29 @@ def rpf(pool, count, used_today, used_month, tanggal_obj, kegiatan=None):
 def get_work_days_in_month(bulan, tahun):
     """Dapatkan semua hari kerja (Senin-Sabtu) dalam bulan, exclude libur & minggu"""
     work_days = []
+    skipped_libur = []
     num_days = calendar.monthrange(tahun, bulan)[1]
+    
+    # Debug: tampilkan semua hari libur di bulan ini
+    hari_libur_list = get_hari_libur_bulan(bulan, tahun)
+    logger.info(f"📅 Hari libur di bulan {bulan}/{tahun}: {hari_libur_list}")
+    
     for day in range(1, num_days + 1):
         tgl_obj = datetime(tahun, bulan, day)
-        if tgl_obj.weekday() == 6:  # Skip Minggu
+        
+        # Skip Minggu
+        if tgl_obj.weekday() == 6:
             continue
-        if cek_hari_libur(tgl_obj):  # Skip hari libur
+        
+        # Skip hari libur (FIXED: gunakan cek_hari_libur yang sudah diperbaiki)
+        if cek_hari_libur(tgl_obj):
+            skipped_libur.append(tgl_obj.strftime('%Y-%m-%d'))
             continue
+        
         work_days.append(tgl_obj)
+    
+    logger.info(f"✅ Total hari kerja: {len(work_days)}, Skip libur: {len(skipped_libur)}")
+    
     return work_days
 
 
@@ -98,8 +135,17 @@ def rpf_simple(pool, count, used_today, tanggal_obj):
     return random.sample(available, min(count, len(available)))
 
 
+def get_dokter_wajib(kegiatan, hari_idx):
+    """Cek apakah ada dokter wajib untuk kegiatan ini di hari ini"""
+    if kegiatan in DOKTER_WAJIB_KEGIATAN:
+        wajib_dict = DOKTER_WAJIB_KEGIATAN[kegiatan]
+        if hari_idx in wajib_dict:
+            return wajib_dict[hari_idx]
+    return None
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# GENERATE DALAM GEDUNG (FIXED: Ujang & Haeriah hanya di Pustu)
+# GENERATE DALAM GEDUNG (FIXED: Ujang & Haeriah hanya di Pustu, Dokter WAJIB)
 # ═══════════════════════════════════════════════════════════════════════════════
 def generate_jadwal_dalam_gedung(bulan, tahun, loka_karya=False):
     jadwal_baru = []
@@ -112,7 +158,8 @@ def generate_jadwal_dalam_gedung(bulan, tahun, loka_karya=False):
     
     for tgl_obj in work_days:
         tgl_str = tgl_obj.strftime('%Y-%m-%d')
-        hari_name = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][tgl_obj.weekday()]
+        hari_idx = tgl_obj.weekday()
+        hari_name = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][hari_idx]
         libur_malam = cek_piket_malam_sebelumnya(tgl_obj)
         used_today = set(libur_malam)
         
@@ -134,12 +181,33 @@ def generate_jadwal_dalam_gedung(bulan, tahun, loka_karya=False):
             for n in p: used_month[n] = used_month.get(n, 0) + 1
             jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': 'POLI PROLANIS', 'penyerta': '; '.join(p), 'kategori': 'dalam_gedung', 'is_auto_generated': True})
         
-        # e & f. KLASTER DEWASA-LANSIA 1 & 2 - GUNAKAN POOL FILTERED
-        for keg in ['KLASTER DEWASA-LANSIA 1', 'KLASTER DEWASA-LANSIA 2']:
-            dok = rpf(POOL_DOKTER_F, 1, used_today, used_month, tgl_obj, kegiatan=keg)
-            if dok:
-                used_today.add(dok[0]); used_month[dok[0]] = used_month.get(dok[0], 0) + 1
-                jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': keg, 'penyerta': dok[0], 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+        # e. KLASTER DEWASA-LANSIA 1 - FIXED: Cek dokter WAJIB
+        dok_wajib = get_dokter_wajib('KLASTER DEWASA-LANSIA 1', hari_idx)
+        if dok_wajib and dok_wajib not in used_today and not is_orang_libur(dok_wajib, tgl_obj):
+            # WAJIB dokter tertentu
+            dok = [dok_wajib]
+            logger.info(f"✅ {tgl_str} ({hari_name}): {dok_wajib} WAJIB di KLASTER DEWASA-LANSIA 1")
+        else:
+            # Random dari pool
+            dok = rpf(POOL_DOKTER_F, 1, used_today, used_month, tgl_obj, kegiatan='KLASTER DEWASA-LANSIA 1')
+        
+        if dok:
+            used_today.add(dok[0]); used_month[dok[0]] = used_month.get(dok[0], 0) + 1
+            jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': 'KLASTER DEWASA-LANSIA 1', 'penyerta': dok[0], 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+        
+        # f. KLASTER DEWASA-LANSIA 2 - FIXED: Cek dokter WAJIB
+        dok_wajib = get_dokter_wajib('KLASTER DEWASA-LANSIA 2', hari_idx)
+        if dok_wajib and dok_wajib not in used_today and not is_orang_libur(dok_wajib, tgl_obj):
+            # WAJIB dokter tertentu
+            dok = [dok_wajib]
+            logger.info(f"✅ {tgl_str} ({hari_name}): {dok_wajib} WAJIB di KLASTER DEWASA-LANSIA 2")
+        else:
+            # Random dari pool
+            dok = rpf(POOL_DOKTER_F, 1, used_today, used_month, tgl_obj, kegiatan='KLASTER DEWASA-LANSIA 2')
+        
+        if dok:
+            used_today.add(dok[0]); used_month[dok[0]] = used_month.get(dok[0], 0) + 1
+            jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': 'KLASTER DEWASA-LANSIA 2', 'penyerta': dok[0], 'kategori': 'dalam_gedung', 'is_auto_generated': True})
         
         # g. KLASTER IBU KIA & USG
         dok = rpf(POOL_DOKTER_KIA, 1, used_today, used_month, tgl_obj, kegiatan='KLASTER IBU KIA & USG')
@@ -204,6 +272,7 @@ def generate_jadwal_dalam_gedung(bulan, tahun, loka_karya=False):
     
     return jadwal_baru, skipped
 
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # GENERATE BOK (31 kegiatan + Sekolah/Pesantren) - FIXED ERROR HANDLING
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -229,7 +298,6 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
         work_days_shuffled = work_days.copy()
         random.shuffle(work_days_shuffled)
         
-        # Track sekolah yang sudah dipilih untuk variasi
         sekolah_terpakai = []
         
         for kegiatan_name, config in KEGIATAN_BOK.items():
@@ -267,14 +335,12 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
                     
                     tgl_str = tgl_obj.strftime('%Y-%m-%d')
                     
-                    # Pilih petugas dengan error handling
                     if not petugas_pool:
                         skipped.append(f"{kegiatan_name}: Pool petugas kosong")
                         break
                     
                     petugas = rpf_simple(petugas_pool, 1, used_luar_per_day.get(tgl_str, set()), tgl_obj)
                     if not petugas:
-                        # Coba hari lain jika petugas tidak terpilih
                         continue
                     
                     penyerta = []
@@ -290,21 +356,17 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
                         if len(available_penyerta) >= count_penyerta:
                             penyerta = random.sample(available_penyerta, count_penyerta)
                         else:
-                            # Tidak cukup penyerta, coba hari lain
                             continue
                     
-                    # Pilih lokasi
                     if lokasi_fixed:
                         lokasi = lokasi_fixed
                     elif is_sekolah:
-                        # Untuk sekolah, pilih dari daftar yang belum terpakai
                         sekolah_tersedia = [s for s in DAFTAR_SEKOLAH_PESANTREN if s not in sekolah_terpakai]
                         if sekolah_tersedia:
                             sekolah_terpilih = random.choice(sekolah_tersedia)
                             sekolah_terpakai.append(sekolah_terpilih)
                             lokasi = f'Sekolah/Pesantren {sekolah_terpilih}'
                         else:
-                            # Reset jika semua sudah terpakai
                             sekolah_terpakai = []
                             sekolah_terpilih = random.choice(DAFTAR_SEKOLAH_PESANTREN)
                             sekolah_terpakai.append(sekolah_terpilih)
@@ -352,7 +414,6 @@ def generate_jadwal_luar_gedung_lainnya(bulan, tahun, jadwal_bok=None, jadwal_da
         jadwal_baru = []
         skipped = []
         
-        # Track used names per day
         used_per_day = {}
         if jadwal_bok:
             for j in jadwal_bok:
@@ -385,7 +446,6 @@ def generate_jadwal_luar_gedung_lainnya(bulan, tahun, jadwal_bok=None, jadwal_da
                     'penyerta_default': data.get('penyerta', [])
                 })
         
-        # Distribusi kegiatan posyandu ke slot yang tersedia
         for keg_name, freq in KEGIATAN_POSYANDU_LIST:
             try:
                 placed = 0
@@ -404,7 +464,6 @@ def generate_jadwal_luar_gedung_lainnya(bulan, tahun, jadwal_bok=None, jadwal_da
                     if not slots_copy:
                         break
                     
-                    # FIX: Hindari ZeroDivisionError
                     slot_index = attempts % len(slots_copy) if len(slots_copy) > 0 else 0
                     slot = slots_copy[slot_index]
                     tgl_str = slot['tanggal']
