@@ -319,7 +319,7 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
                 
                 placed = 0
                 attempts = 0
-                max_attempts = freq * 20
+                max_attempts = freq * 50
                 
                 while placed < freq and attempts < max_attempts:
                     attempts += 1
@@ -421,8 +421,9 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
                     placed += 1
                 
                 if placed < freq:
-                    skipped.append(f"{kegiatan_name}: Hanya {placed}/{freq} yang berhasil dijadwalkan")
-            
+                  skipped.append(f"{kegiatan_name}: Hanya {placed}/{freq} yang berhasil dijadwalkan")
+                  logger.error(f"❌ {kegiatan_name}: {placed}/{freq} (attempts: {attempts}, pool_size: {len(penyerta_pool)})")
+
             except Exception as e:
                 skipped.append(f"{kegiatan_name}: Error - {str(e)}")
                 continue
