@@ -145,15 +145,20 @@ def get_dokter_wajib(kegiatan, hari_idx):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# GENERATE DALAM GEDUNG (FIXED: Ujang & Haeriah hanya di Pustu, Dokter WAJIB)
+# GENERATE DALAM GEDUNG (TANPA RANDOM - MENGGUNAKAN JADWAL TETAP)
 # ═══════════════════════════════════════════════════════════════════════════════
 def generate_jadwal_dalam_gedung(bulan, tahun, loka_karya=False):
+    """
+    Generate jadwal dalam gedung TANPA randomisasi.
+    Semua kegiatan menggunakan jadwal tetap dengan petugas yang sudah ditentukan.
+    """
     jadwal_baru = []
     skipped = []
     work_days = get_work_days_in_month(bulan, tahun)
     if not work_days:
         return [], ["Tidak ada hari kerja di bulan ini"]
     
+    # Kita tetap track used_month untuk keperluan konsistensi data
     used_month = {n: 0 for n in POOL_ILP + POOL_DOKTER + POOL_BIDAN}
     
     for tgl_obj in work_days:
@@ -163,122 +168,487 @@ def generate_jadwal_dalam_gedung(bulan, tahun, loka_karya=False):
         libur_malam = cek_piket_malam_sebelumnya(tgl_obj)
         used_today = set(libur_malam)
         
-        # a. PENDAFTARAN
-        jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': 'PENDAFTARAN', 'penyerta': '; '.join(PENDAFTARAN_TETAP), 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+        # a. PENDAFTARAN - TETAP
+        jadwal_baru.append({
+            'tanggal': tgl_str, 
+            'lokasi': 'Dalam Gedung', 
+            'kegiatan': 'PENDAFTARAN', 
+            'penyerta': '; '.join(PENDAFTARAN_TETAP), 
+            'kategori': 'dalam_gedung', 
+            'is_auto_generated': True
+        })
         used_today.update(PENDAFTARAN_TETAP)
+        for n in PENDAFTARAN_TETAP:
+            used_month[n] = used_month.get(n, 0) + 1
         
-        # b & c. SKRINING ILP 1 & 2 - GUNAKAN POOL FILTERED
+        # b & c. SKRINING ILP 1 & 2 - TETAP (menggunakan petugas terjadwal)
         for keg in ['SKRINING ILP 1', 'SKRINING ILP 2']:
-            p = rpf(POOL_ILP_F, 1, used_today, used_month, tgl_obj)
-            if p:
-                used_today.add(p[0]); used_month[p[0]] = used_month.get(p[0], 0) + 1
-                jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': keg, 'penyerta': p[0], 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+            # Cari petugas yang tersedia (prioritaskan yang belum dipakai hari itu)
+            available = [n for n in POOL_ILP_F if n not in used_today and not is_orang_libur(n, tgl_obj)]
+            if available:
+                petugas = [available[0]]
+                used_today.add(petugas[0])
+                used_month[petugas[0]] = used_month.get(petugas[0], 0) + 1
+                jadwal_baru.append({
+                    'tanggal': tgl_str, 
+                    'lokasi': 'Dalam Gedung', 
+                    'kegiatan': keg, 
+                    'penyerta': petugas[0], 
+                    'kategori': 'dalam_gedung', 
+                    'is_auto_generated': True
+                })
+            else:
+                skipped.append(f"{tgl_str}: Tidak ada petugas untuk {keg}")
         
-        # d. POLI PROLANIS - GUNAKAN POOL FILTERED
-        p = rpf(POOL_ILP_F, 3, used_today, used_month, tgl_obj)
-        if len(p) >= 3:
-            used_today.update(p)
-            for n in p: used_month[n] = used_month.get(n, 0) + 1
-            jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': 'POLI PROLANIS', 'penyerta': '; '.join(p), 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+        # d. POLI PROLANIS - TETAP
+        available = [n for n in POOL_ILP_F if n not in used_today and not is_orang_libur(n, tgl_obj)]
+        if len(available) >= 3:
+            petugas = available[:3]
+            used_today.update(petugas)
+            for n in petugas:
+                used_month[n] = used_month.get(n, 0) + 1
+            jadwal_baru.append({
+                'tanggal': tgl_str, 
+                'lokasi': 'Dalam Gedung', 
+                'kegiatan': 'POLI PROLANIS', 
+                'penyerta': '; '.join(petugas), 
+                'kategori': 'dalam_gedung', 
+                'is_auto_generated': True
+            })
+        else:
+            skipped.append(f"{tgl_str}: Tidak cukup petugas untuk POLI PROLANIS (butuh 3, tersedia {len(available)})")
         
-        # e. KLASTER DEWASA-LANSIA 1 - FIXED: Cek dokter WAJIB
+        # e. KLASTER DEWASA-LANSIA 1 - TETAP dengan DOKTER WAJIB
         dok_wajib = get_dokter_wajib('KLASTER DEWASA-LANSIA 1', hari_idx)
         if dok_wajib and dok_wajib not in used_today and not is_orang_libur(dok_wajib, tgl_obj):
             dok = [dok_wajib]
             logger.info(f"✅ {tgl_str} ({hari_name}): {dok_wajib} WAJIB di KLASTER DEWASA-LANSIA 1")
         else:
-            dok = rpf(POOL_DOKTER_F, 1, used_today, used_month, tgl_obj, kegiatan='KLASTER DEWASA-LANSIA 1')
+            # Cari dokter yang tersedia
+            available = [n for n in POOL_DOKTER_F if n not in used_today and not is_orang_libur(n, tgl_obj) 
+                        and is_dokter_available_for_kegiatan(n, 'KLASTER DEWASA-LANSIA 1', tgl_obj)]
+            dok = available[:1] if available else []
         
         if dok:
-            used_today.add(dok[0]); used_month[dok[0]] = used_month.get(dok[0], 0) + 1
-            jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': 'KLASTER DEWASA-LANSIA 1', 'penyerta': dok[0], 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+            used_today.add(dok[0])
+            used_month[dok[0]] = used_month.get(dok[0], 0) + 1
+            jadwal_baru.append({
+                'tanggal': tgl_str, 
+                'lokasi': 'Dalam Gedung', 
+                'kegiatan': 'KLASTER DEWASA-LANSIA 1', 
+                'penyerta': dok[0], 
+                'kategori': 'dalam_gedung', 
+                'is_auto_generated': True
+            })
+        else:
+            skipped.append(f"{tgl_str}: Tidak ada dokter untuk KLASTER DEWASA-LANSIA 1")
         
-        # f. KLASTER DEWASA-LANSIA 2 - FIXED: Cek dokter WAJIB
+        # f. KLASTER DEWASA-LANSIA 2 - TETAP dengan DOKTER WAJIB
         dok_wajib = get_dokter_wajib('KLASTER DEWASA-LANSIA 2', hari_idx)
         if dok_wajib and dok_wajib not in used_today and not is_orang_libur(dok_wajib, tgl_obj):
             dok = [dok_wajib]
             logger.info(f"✅ {tgl_str} ({hari_name}): {dok_wajib} WAJIB di KLASTER DEWASA-LANSIA 2")
         else:
-            dok = rpf(POOL_DOKTER_F, 1, used_today, used_month, tgl_obj, kegiatan='KLASTER DEWASA-LANSIA 2')
+            available = [n for n in POOL_DOKTER_F if n not in used_today and not is_orang_libur(n, tgl_obj)
+                        and is_dokter_available_for_kegiatan(n, 'KLASTER DEWASA-LANSIA 2', tgl_obj)]
+            dok = available[:1] if available else []
         
         if dok:
-            used_today.add(dok[0]); used_month[dok[0]] = used_month.get(dok[0], 0) + 1
-            jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': 'KLASTER DEWASA-LANSIA 2', 'penyerta': dok[0], 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+            used_today.add(dok[0])
+            used_month[dok[0]] = used_month.get(dok[0], 0) + 1
+            jadwal_baru.append({
+                'tanggal': tgl_str, 
+                'lokasi': 'Dalam Gedung', 
+                'kegiatan': 'KLASTER DEWASA-LANSIA 2', 
+                'penyerta': dok[0], 
+                'kategori': 'dalam_gedung', 
+                'is_auto_generated': True
+            })
+        else:
+            skipped.append(f"{tgl_str}: Tidak ada dokter untuk KLASTER DEWASA-LANSIA 2")
         
-        # g. KLASTER IBU KIA & USG - FIXED: Cek dokter WAJIB
+        # g. KLASTER IBU KIA & USG - TETAP dengan DOKTER WAJIB
         dok_wajib = get_dokter_wajib('KLASTER IBU KIA & USG', hari_idx)
         if dok_wajib and dok_wajib not in used_today and not is_orang_libur(dok_wajib, tgl_obj):
             dok = [dok_wajib]
             logger.info(f"✅ {tgl_str} ({hari_name}): {dok_wajib} WAJIB di KLASTER IBU KIA & USG")
         else:
-            dok = rpf(POOL_DOKTER_KIA, 1, used_today, used_month, tgl_obj, kegiatan='KLASTER IBU KIA & USG')
+            available = [n for n in POOL_DOKTER_KIA if n not in used_today and not is_orang_libur(n, tgl_obj)
+                        and is_dokter_available_for_kegiatan(n, 'KLASTER IBU KIA & USG', tgl_obj)]
+            dok = available[:1] if available else []
         
-        bidan = rpf(POOL_BIDAN, 2, used_today, used_month, tgl_obj)
+        # Cari bidan yang tersedia
+        available_bidan = [n for n in POOL_BIDAN if n not in used_today and not is_orang_libur(n, tgl_obj)]
+        bidan = available_bidan[:2] if len(available_bidan) >= 2 else []
+        
         if dok and len(bidan) >= 2:
-            used_today.add(dok[0]); used_month[dok[0]] = used_month.get(dok[0], 0) + 1
+            used_today.add(dok[0])
+            used_month[dok[0]] = used_month.get(dok[0], 0) + 1
             used_today.update(bidan)
-            for n in bidan: used_month[n] = used_month.get(n, 0) + 1
-            jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': 'KLASTER IBU KIA & USG', 'penyerta': f"{dok[0]}; {'; '.join(bidan)}", 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+            for n in bidan:
+                used_month[n] = used_month.get(n, 0) + 1
+            jadwal_baru.append({
+                'tanggal': tgl_str, 
+                'lokasi': 'Dalam Gedung', 
+                'kegiatan': 'KLASTER IBU KIA & USG', 
+                'penyerta': f"{dok[0]}; {'; '.join(bidan)}", 
+                'kategori': 'dalam_gedung', 
+                'is_auto_generated': True
+            })
+        else:
+            if not dok:
+                skipped.append(f"{tgl_str}: Tidak ada dokter untuk KLASTER IBU KIA & USG")
+            elif len(bidan) < 2:
+                skipped.append(f"{tgl_str}: Tidak cukup bidan untuk KLASTER IBU KIA & USG (butuh 2, tersedia {len(bidan)})")
         
-        # h. KLASTER ANAK
-        dok = rpf(POOL_DOKTER_KIA, 1, used_today, used_month, tgl_obj, kegiatan='KLASTER ANAK')
-        bidan = rpf(POOL_BIDAN, 2, used_today, used_month, tgl_obj)
+        # h. KLASTER ANAK - TETAP
+        available_dokter = [n for n in POOL_DOKTER_KIA if n not in used_today and not is_orang_libur(n, tgl_obj)
+                           and is_dokter_available_for_kegiatan(n, 'KLASTER ANAK', tgl_obj)]
+        dok = available_dokter[:1] if available_dokter else []
+        
+        available_bidan = [n for n in POOL_BIDAN if n not in used_today and not is_orang_libur(n, tgl_obj)]
+        bidan = available_bidan[:2] if len(available_bidan) >= 2 else []
+        
         if dok and len(bidan) >= 2:
-            used_today.add(dok[0]); used_month[dok[0]] = used_month.get(dok[0], 0) + 1
+            used_today.add(dok[0])
+            used_month[dok[0]] = used_month.get(dok[0], 0) + 1
             used_today.update(bidan)
-            for n in bidan: used_month[n] = used_month.get(n, 0) + 1
-            jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': 'KLASTER ANAK', 'penyerta': f"{dok[0]}; {'; '.join(bidan)}", 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+            for n in bidan:
+                used_month[n] = used_month.get(n, 0) + 1
+            jadwal_baru.append({
+                'tanggal': tgl_str, 
+                'lokasi': 'Dalam Gedung', 
+                'kegiatan': 'KLASTER ANAK', 
+                'penyerta': f"{dok[0]}; {'; '.join(bidan)}", 
+                'kategori': 'dalam_gedung', 
+                'is_auto_generated': True
+            })
+        else:
+            if not dok:
+                skipped.append(f"{tgl_str}: Tidak ada dokter untuk KLASTER ANAK")
+            elif len(bidan) < 2:
+                skipped.append(f"{tgl_str}: Tidak cukup bidan untuk KLASTER ANAK (butuh 2, tersedia {len(bidan)})")
         
-        # i. R. IMUNISASI (Kamis)
+        # i. R. IMUNISASI (Kamis) - TETAP
         if hari_name == "Kamis":
-            bidan = rpf(POOL_BIDAN, 2, used_today, used_month, tgl_obj)
-            if len(bidan) >= 2:
+            available_bidan = [n for n in POOL_BIDAN if n not in used_today and not is_orang_libur(n, tgl_obj)]
+            if len(available_bidan) >= 2:
+                bidan = available_bidan[:2]
                 used_today.update(bidan)
-                for n in bidan: used_month[n] = used_month.get(n, 0) + 1
-                jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': 'R. IMUNISASI', 'penyerta': '; '.join(bidan), 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+                for n in bidan:
+                    used_month[n] = used_month.get(n, 0) + 1
+                jadwal_baru.append({
+                    'tanggal': tgl_str, 
+                    'lokasi': 'Dalam Gedung', 
+                    'kegiatan': 'R. IMUNISASI', 
+                    'penyerta': '; '.join(bidan), 
+                    'kategori': 'dalam_gedung', 
+                    'is_auto_generated': True
+                })
+            else:
+                skipped.append(f"{tgl_str}: Tidak cukup bidan untuk R. IMUNISASI (butuh 2, tersedia {len(available_bidan)})")
         
-        # j. R. TINDAKAN - GUNAKAN POOL FILTERED
-        p = rpf(POOL_TINDAKAN_F, 1, used_today, used_month, tgl_obj)
-        if p:
-            used_today.add(p[0]); used_month[p[0]] = used_month.get(p[0], 0) + 1
-            jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': 'R. TINDAKAN', 'penyerta': p[0], 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+        # j. R. TINDAKAN - TETAP
+        available = [n for n in POOL_TINDAKAN_F if n not in used_today and not is_orang_libur(n, tgl_obj)]
+        if available:
+            petugas = [available[0]]
+            used_today.add(petugas[0])
+            used_month[petugas[0]] = used_month.get(petugas[0], 0) + 1
+            jadwal_baru.append({
+                'tanggal': tgl_str, 
+                'lokasi': 'Dalam Gedung', 
+                'kegiatan': 'R. TINDAKAN', 
+                'penyerta': petugas[0], 
+                'kategori': 'dalam_gedung', 
+                'is_auto_generated': True
+            })
+        else:
+            skipped.append(f"{tgl_str}: Tidak ada petugas untuk R. TINDAKAN")
         
-        # k, l, m. BP GIGI, APOTEK, LAB
+        # k, l, m. BP GIGI, APOTEK, LAB - TETAP
         for keg, staff in [('BP GIGI', BP_GIGI_TETAP), ('APOTEK', APOTEK_TETAP), ('LAB', LAB_TETAP)]:
-            jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': keg, 'penyerta': '; '.join(staff), 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+            jadwal_baru.append({
+                'tanggal': tgl_str, 
+                'lokasi': 'Dalam Gedung', 
+                'kegiatan': keg, 
+                'penyerta': '; '.join(staff), 
+                'kategori': 'dalam_gedung', 
+                'is_auto_generated': True
+            })
             used_today.update(staff)
+            for n in staff:
+                used_month[n] = used_month.get(n, 0) + 1
         
-        # n. R. TB (Selasa)
+        # n. R. TB (Selasa) - TETAP
         if hari_name == "Selasa":
-            jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': 'R. TB', 'penyerta': 'Mutia Wulansari.,S.Kep.,Ners', 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+            jadwal_baru.append({
+                'tanggal': tgl_str, 
+                'lokasi': 'Dalam Gedung', 
+                'kegiatan': 'R. TB', 
+                'penyerta': 'Mutia Wulansari.,S.Kep.,Ners', 
+                'kategori': 'dalam_gedung', 
+                'is_auto_generated': True
+            })
             used_today.add('Mutia Wulansari.,S.Kep.,Ners')
             used_month['Mutia Wulansari.,S.Kep.,Ners'] = used_month.get('Mutia Wulansari.,S.Kep.,Ners', 0) + 1
         
-        # o. ADMINISTRASI - GUNAKAN POOL FILTERED
-        extra = rpf(ADMINISTRASI_EXTRA, 1, used_today, used_month, tgl_obj)
+        # o. ADMINISTRASI - TETAP
+        # Cari extra administrasi yang tersedia
+        available_extra = [n for n in ADMINISTRASI_EXTRA if n not in used_today and not is_orang_libur(n, tgl_obj)]
+        extra = available_extra[:1] if available_extra else []
         adm_total = ADMINISTRASI_TETAP + extra
-        jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': 'ADMINISTRASI', 'penyerta': '; '.join(adm_total), 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+        jadwal_baru.append({
+            'tanggal': tgl_str, 
+            'lokasi': 'Dalam Gedung', 
+            'kegiatan': 'ADMINISTRASI', 
+            'penyerta': '; '.join(adm_total), 
+            'kategori': 'dalam_gedung', 
+            'is_auto_generated': True
+        })
         used_today.update(adm_total)
-        for n in adm_total: used_month[n] = used_month.get(n, 0) + 1
+        for n in adm_total:
+            used_month[n] = used_month.get(n, 0) + 1
         
-        # p & q. PUSTU (Ujang & Haeriah HANYA di sini)
+        # p & q. PUSTU (Ujang & Haeriah HANYA di sini) - TETAP
         for lok, staff in [('Pustu Ciangir', PUSTU_CIANGIR), ('Pustu Sumelap', PUSTU_SUMELAP)]:
-            jadwal_baru.append({'tanggal': tgl_str, 'lokasi': lok, 'kegiatan': 'PELAYANAN PUSTU', 'penyerta': staff, 'kategori': 'dalam_gedung', 'is_auto_generated': True})
-            used_today.add(staff); used_month[staff] = used_month.get(staff, 0) + 1
+            jadwal_baru.append({
+                'tanggal': tgl_str, 
+                'lokasi': lok, 
+                'kegiatan': 'PELAYANAN PUSTU', 
+                'penyerta': staff, 
+                'kategori': 'dalam_gedung', 
+                'is_auto_generated': True
+            })
+            used_today.add(staff)
+            used_month[staff] = used_month.get(staff, 0) + 1
         
-        # Loka Karya Mini - GUNAKAN POOL FILTERED
+        # Loka Karya Mini - TETAP (hanya Senin)
         if loka_karya and hari_name == "Senin":
-            jadwal_baru.append({'tanggal': tgl_str, 'lokasi': 'Dalam Gedung', 'kegiatan': 'LOKA KARYA MINI BULANAN', 'penyerta': '; '.join(LOKA_KARYA_MINI_F), 'kategori': 'dalam_gedung', 'is_auto_generated': True})
+            jadwal_baru.append({
+                'tanggal': tgl_str, 
+                'lokasi': 'Dalam Gedung', 
+                'kegiatan': 'LOKA KARYA MINI BULANAN', 
+                'penyerta': '; '.join(LOKA_KARYA_MINI_F), 
+                'kategori': 'dalam_gedung', 
+                'is_auto_generated': True
+            })
             used_today.update(LOKA_KARYA_MINI_F)
-            for n in LOKA_KARYA_MINI_F: used_month[n] = used_month.get(n, 0) + 1
+            for n in LOKA_KARYA_MINI_F:
+                used_month[n] = used_month.get(n, 0) + 1
     
     return jadwal_baru, skipped
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# GENERATE BOK (31 kegiatan + Sekolah/Pesantren) - FIXED ERROR HANDLING
+# GENERATE PELAYANAN LUAR GEDUNG (TANPA RANDOM - MENGGUNAKAN JADWAL TETAP)
+# ═══════════════════════════════════════════════════════════════════════════════
+def generate_jadwal_luar_gedung_lainnya(bulan, tahun, jadwal_bok=None, jadwal_dalam_gedung=None):
+    """
+    Generate jadwal pelayanan luar gedung (Posyandu, Posbindu, UKK, Pos Remaja)
+    TANPA randomisasi - menggunakan jadwal tetap yang sudah ditentukan.
+    """
+    try:
+        jadwal_baru = []
+        skipped = []
+        
+        # Track petugas yang sudah dipakai di BOK dan Dalam Gedung untuk menghindari double
+        used_per_day = {}
+        if jadwal_bok:
+            for j in jadwal_bok:
+                tgl = j['tanggal']
+                if tgl not in used_per_day: 
+                    used_per_day[tgl] = set()
+                names = [n.strip() for n in j.get('penyerta', '').split(';') if n.strip()]
+                used_per_day[tgl].update(names)
+        if jadwal_dalam_gedung:
+            for j in jadwal_dalam_gedung:
+                tgl = j['tanggal']
+                if tgl not in used_per_day: 
+                    used_per_day[tgl] = set()
+                names = [n.strip() for n in j.get('penyerta', '').split(';') if n.strip()]
+                used_per_day[tgl].update(names)
+        
+        def get_date(hari, minggu_ke):
+            return get_nth_weekday_date(tahun, bulan, hari, minggu_ke)
+        
+        # ─── 1. POSYANDU (langsung menggunakan jadwal fixed) ───────────────────
+        for nama_pos, data in JADWAL_POSYANDU_FIXED.items():
+            try:
+                tgl_obj = get_date(data['hari'], data['minggu_ke'])
+                if not tgl_obj:
+                    skipped.append(f"{nama_pos}: Tanggal tidak valid")
+                    continue
+                    
+                if cek_hari_libur(tgl_obj):
+                    skipped.append(f"{nama_pos}: Tanggal {tgl_obj.strftime('%Y-%m-%d')} adalah hari libur")
+                    continue
+                
+                tgl_str = tgl_obj.strftime('%Y-%m-%d')
+                if tgl_str not in used_per_day:
+                    used_per_day[tgl_str] = set()
+                
+                # Ambil petugas dari jadwal fixed
+                petugas = data.get('petugas', [])
+                # Ambil penyerta dari jadwal fixed
+                penyerta = data.get('penyerta', [])
+                
+                # Filter petugas yang tidak libur
+                petugas = [p for p in petugas if not is_orang_libur(p, tgl_obj)]
+                penyerta = [p for p in penyerta if not is_orang_libur(p, tgl_obj)]
+                
+                if petugas:
+                    all_names = petugas + penyerta
+                    jadwal_baru.append({
+                        'tanggal': tgl_str, 
+                        'lokasi': nama_pos, 
+                        'kegiatan': 'Pelaksanaan Posyandu',
+                        'penyerta': '; '.join(all_names), 
+                        'kategori': 'luar_gedung',
+                        'sub_kategori': 'posyandu', 
+                        'is_auto_generated': True
+                    })
+                    used_per_day[tgl_str].update(all_names)
+                else:
+                    skipped.append(f"{nama_pos}: Tidak ada petugas tersedia")
+                    
+            except Exception as e:
+                skipped.append(f"Posyandu {nama_pos}: Error - {str(e)}")
+                continue
+        
+        # ─── 2. POSBINDU (langsung menggunakan jadwal fixed) ──────────────────
+        for nama_pos, data in JADWAL_POSBINDU_FIXED.items():
+            try:
+                tgl_obj = get_date(data['hari'], data['minggu_ke'])
+                if not tgl_obj:
+                    skipped.append(f"{nama_pos}: Tanggal tidak valid")
+                    continue
+                    
+                if cek_hari_libur(tgl_obj):
+                    skipped.append(f"{nama_pos}: Tanggal {tgl_obj.strftime('%Y-%m-%d')} adalah hari libur")
+                    continue
+                
+                tgl_str = tgl_obj.strftime('%Y-%m-%d')
+                if tgl_str not in used_per_day:
+                    used_per_day[tgl_str] = set()
+                
+                petugas = data.get('petugas', [])
+                petugas = [p for p in petugas if not is_orang_libur(p, tgl_obj)]
+                
+                if petugas:
+                    jadwal_baru.append({
+                        'tanggal': tgl_str, 
+                        'lokasi': nama_pos, 
+                        'kegiatan': 'Pelaksanaan Posbindu',
+                        'penyerta': '; '.join(petugas), 
+                        'kategori': 'luar_gedung',
+                        'sub_kategori': 'posbindu', 
+                        'is_auto_generated': True
+                    })
+                    used_per_day[tgl_str].update(petugas)
+                else:
+                    skipped.append(f"{nama_pos}: Tidak ada petugas tersedia")
+                    
+            except Exception as e:
+                skipped.append(f"Posbindu {nama_pos}: Error - {str(e)}")
+                continue
+        
+        # ─── 3. POS REMAJA (langsung menggunakan jadwal fixed) ────────────────
+        for nama_pos, data in JADWAL_POS_REMAJA_FIXED.items():
+            try:
+                tgl_obj = get_date(data['hari'], data['minggu_ke'])
+                if not tgl_obj:
+                    skipped.append(f"{nama_pos}: Tanggal tidak valid")
+                    continue
+                    
+                if cek_hari_libur(tgl_obj):
+                    skipped.append(f"{nama_pos}: Tanggal {tgl_obj.strftime('%Y-%m-%d')} adalah hari libur")
+                    continue
+                
+                tgl_str = tgl_obj.strftime('%Y-%m-%d')
+                if tgl_str not in used_per_day:
+                    used_per_day[tgl_str] = set()
+                
+                petugas = data.get('petugas', [])
+                petugas = [p for p in petugas if not is_orang_libur(p, tgl_obj)]
+                
+                if petugas:
+                    jadwal_baru.append({
+                        'tanggal': tgl_str, 
+                        'lokasi': nama_pos, 
+                        'kegiatan': 'Pembinaan Kesehatan di Komunitas',
+                        'penyerta': '; '.join(petugas), 
+                        'kategori': 'luar_gedung',
+                        'sub_kategori': 'pos_remaja', 
+                        'is_auto_generated': True
+                    })
+                    used_per_day[tgl_str].update(petugas)
+                else:
+                    skipped.append(f"{nama_pos}: Tidak ada petugas tersedia")
+                    
+            except Exception as e:
+                skipped.append(f"Pos Remaja {nama_pos}: Error - {str(e)}")
+                continue
+        
+        # ─── 4. UKK (menggunakan jadwal yang ditentukan) ──────────────────────
+        for ukk in DAFTAR_UKK:
+            try:
+                # Cari hari kerja yang tersedia untuk UKK
+                work_days = get_work_days_in_month(bulan, tahun)
+                if not work_days:
+                    skipped.append(f"UKK {ukk.get('nama', 'Unknown')}: Tidak ada hari kerja")
+                    continue
+                
+                # Cari hari yang masih available
+                available_days = []
+                for tgl_obj in work_days:
+                    tgl_str = tgl_obj.strftime('%Y-%m-%d')
+                    if tgl_str not in used_per_day:
+                        available_days.append(tgl_obj)
+                
+                if not available_days:
+                    skipped.append(f"UKK {ukk.get('nama', 'Unknown')}: Tidak ada hari tersedia")
+                    continue
+                
+                tgl_obj = available_days[0]  # Ambil hari pertama yang tersedia
+                tgl_str = tgl_obj.strftime('%Y-%m-%d')
+                if tgl_str not in used_per_day:
+                    used_per_day[tgl_str] = set()
+                
+                petugas = ukk.get('petugas', [])
+                petugas = [p for p in petugas if not is_orang_libur(p, tgl_obj)]
+                
+                if petugas:
+                    jadwal_baru.append({
+                        'tanggal': tgl_str, 
+                        'lokasi': ukk['nama'], 
+                        'kegiatan': 'Pelayanan UKK',
+                        'penyerta': '; '.join(petugas), 
+                        'kategori': 'luar_gedung',
+                        'sub_kategori': 'ukk', 
+                        'is_auto_generated': True
+                    })
+                    used_per_day[tgl_str].update(petugas)
+                else:
+                    skipped.append(f"UKK {ukk.get('nama', 'Unknown')}: Tidak ada petugas tersedia")
+                    
+            except Exception as e:
+                skipped.append(f"UKK {ukk.get('nama', 'Unknown')}: Error - {str(e)}")
+                continue
+        
+        return jadwal_baru, skipped
+    
+    except Exception as e:
+        return [], [f"Error fatal di generate_jadwal_luar_gedung_lainnya: {str(e)}"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GENERATE BOK (31 kegiatan + Sekolah/Pesantren) - HANYA INI YANG RANDOM
 # ═══════════════════════════════════════════════════════════════════════════════
 def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
+    """
+    Generate jadwal BOK dengan RANDOMISASI.
+    Hanya fungsi ini yang menggunakan randomisasi.
+    """
     try:
         jadwal_baru = []
         skipped = []
@@ -290,7 +660,6 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
         used_luar_per_day = {d.strftime('%Y-%m-%d'): set() for d in work_days}
         
         # Track untuk kegiatan yang BOLEH double luar (track kombinasi kegiatan+lokasi)
-        # Format: {tgl_str: {(kegiatan, lokasi): set(nama)}}
         double_luar_tracker = {d.strftime('%Y-%m-%d'): {} for d in work_days}
         
         used_dalam_per_day = {}
@@ -489,167 +858,3 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
     
     except Exception as e:
         return [], [f"Error fatal di generate_jadwal_luar_gedung_bok: {str(e)}"]
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# GENERATE PELAYANAN LUAR GEDUNG (Posyandu, Posbindu, UKK, Pos Remaja) - FIXED
-# ═══════════════════════════════════════════════════════════════════════════════
-def generate_jadwal_luar_gedung_lainnya(bulan, tahun, jadwal_bok=None, jadwal_dalam_gedung=None):
-    try:
-        jadwal_baru = []
-        skipped = []
-        
-        used_per_day = {}
-        if jadwal_bok:
-            for j in jadwal_bok:
-                tgl = j['tanggal']
-                if tgl not in used_per_day: 
-                    used_per_day[tgl] = set()
-                names = [n.strip() for n in j.get('penyerta', '').split(';') if n.strip()]
-                used_per_day[tgl].update(names)
-        if jadwal_dalam_gedung:
-            for j in jadwal_dalam_gedung:
-                tgl = j['tanggal']
-                if tgl not in used_per_day: 
-                    used_per_day[tgl] = set()
-                names = [n.strip() for n in j.get('penyerta', '').split(';') if n.strip()]
-                used_per_day[tgl].update(names)
-        
-        def get_date(hari, minggu_ke):
-            return get_nth_weekday_date(tahun, bulan, hari, minggu_ke)
-        
-        # ─── 1. POSYANDU (tanggal fixed sesuai jadwal buka) ───────────────────
-        posyandu_slots = []
-        for nama_pos, data in JADWAL_POSYANDU_FIXED.items():
-            tgl_obj = get_date(data['hari'], data['minggu_ke'])
-            if tgl_obj and not cek_hari_libur(tgl_obj):
-                tgl_str = tgl_obj.strftime('%Y-%m-%d')
-                posyandu_slots.append({
-                    'tanggal': tgl_str, 'lokasi': nama_pos,
-                    'kelurahan': data['kelurahan'],
-                    'petugas_default': data.get('petugas', []),
-                    'penyerta_default': data.get('penyerta', [])
-                })
-        
-        for keg_name, freq in KEGIATAN_POSYANDU_LIST:
-            try:
-                placed = 0
-                attempts = 0
-                
-                if not posyandu_slots:
-                    skipped.append(f"{keg_name}: Tidak ada slot posyandu tersedia")
-                    continue
-                
-                slots_copy = posyandu_slots.copy()
-                random.shuffle(slots_copy)
-                
-                while placed < freq and attempts < len(slots_copy) * 2:
-                    attempts += 1
-                    
-                    if not slots_copy:
-                        break
-                    
-                    slot_index = attempts % len(slots_copy) if len(slots_copy) > 0 else 0
-                    slot = slots_copy[slot_index]
-                    tgl_str = slot['tanggal']
-                    
-                    if tgl_str not in used_per_day: 
-                        used_per_day[tgl_str] = set()
-                    
-                    petugas = slot['petugas_default']
-                    penyerta = slot['penyerta_default']
-                    
-                    if not petugas:
-                        p = rpf_simple(POOL_PETUGAS_BIDAN_PERAWAT, 1, used_per_day[tgl_str], datetime.strptime(tgl_str, '%Y-%m-%d'))
-                        if p: 
-                            petugas = p
-                    
-                    if not penyerta:
-                        exclude = set(petugas) if petugas else set()
-                        exclude.update(used_per_day[tgl_str])
-                        available = [n for n in POOL_PETUGAS_BIDAN_PERAWAT if n not in exclude and not is_orang_libur(n, datetime.strptime(tgl_str, '%Y-%m-%d'))]
-                        if available: 
-                            penyerta = random.sample(available, 1)
-                    
-                    if petugas and penyerta:
-                        all_names = petugas + penyerta
-                        jadwal_baru.append({
-                            'tanggal': tgl_str, 'lokasi': slot['lokasi'], 'kegiatan': keg_name,
-                            'penyerta': '; '.join(all_names), 'kategori': 'luar_gedung',
-                            'sub_kategori': 'posyandu', 'is_auto_generated': True
-                        })
-                        used_per_day[tgl_str].update(all_names)
-                        placed += 1
-                
-                if placed < freq:
-                    skipped.append(f"{keg_name}: Hanya {placed}/{freq} yang berhasil dijadwalkan")
-            
-            except Exception as e:
-                skipped.append(f"{keg_name}: Error - {str(e)}")
-                continue
-        
-        # ─── 2. POSBINDU (tanggal fixed) ──────────────────────────────────────
-        for nama_pos, data in JADWAL_POSBINDU_FIXED.items():
-            try:
-                tgl_obj = get_date(data['hari'], data['minggu_ke'])
-                if tgl_obj and not cek_hari_libur(tgl_obj):
-                    tgl_str = tgl_obj.strftime('%Y-%m-%d')
-                    if tgl_str not in used_per_day: 
-                        used_per_day[tgl_str] = set()
-                    petugas = data.get('petugas', [])
-                    if petugas:
-                        jadwal_baru.append({
-                            'tanggal': tgl_str, 'lokasi': nama_pos, 'kegiatan': 'Pelaksanaan Posbindu',
-                            'penyerta': '; '.join(petugas), 'kategori': 'luar_gedung',
-                            'sub_kategori': 'posbindu', 'is_auto_generated': True
-                        })
-                        used_per_day[tgl_str].update(petugas)
-            except Exception as e:
-                skipped.append(f"Posbindu {nama_pos}: Error - {str(e)}")
-                continue
-        
-        # ─── 3. POS REMAJA (tanggal fixed) ────────────────────────────────────
-        for nama_pos, data in JADWAL_POS_REMAJA_FIXED.items():
-            try:
-                tgl_obj = get_date(data['hari'], data['minggu_ke'])
-                if tgl_obj and not cek_hari_libur(tgl_obj):
-                    tgl_str = tgl_obj.strftime('%Y-%m-%d')
-                    if tgl_str not in used_per_day: 
-                        used_per_day[tgl_str] = set()
-                    petugas = data.get('petugas', [])
-                    if petugas:
-                        jadwal_baru.append({
-                            'tanggal': tgl_str, 'lokasi': nama_pos, 'kegiatan': 'Pembinaan Kesehatan di Komunitas',
-                            'penyerta': '; '.join(petugas), 'kategori': 'luar_gedung',
-                            'sub_kategori': 'pos_remaja', 'is_auto_generated': True
-                        })
-                        used_per_day[tgl_str].update(petugas)
-            except Exception as e:
-                skipped.append(f"Pos Remaja {nama_pos}: Error - {str(e)}")
-                continue
-        
-        # ─── 4. UKK (random work day) ─────────────────────────────────────────
-        work_days = get_work_days_in_month(bulan, tahun)
-        for ukk in DAFTAR_UKK:
-            try:
-                if not work_days: 
-                    continue
-                tgl_obj = random.choice(work_days)
-                tgl_str = tgl_obj.strftime('%Y-%m-%d')
-                if tgl_str not in used_per_day: 
-                    used_per_day[tgl_str] = set()
-                petugas = ukk.get('petugas', [])
-                if petugas:
-                    jadwal_baru.append({
-                        'tanggal': tgl_str, 'lokasi': ukk['nama'], 'kegiatan': 'Pelayanan UKK',
-                        'penyerta': '; '.join(petugas), 'kategori': 'luar_gedung',
-                        'sub_kategori': 'ukk', 'is_auto_generated': True
-                    })
-                    used_per_day[tgl_str].update(petugas)
-            except Exception as e:
-                skipped.append(f"UKK {ukk.get('nama', 'Unknown')}: Error - {str(e)}")
-                continue
-        
-        return jadwal_baru, skipped
-    
-    except Exception as e:
-        return [], [f"Error fatal di generate_jadwal_luar_gedung_lainnya: {str(e)}"]
