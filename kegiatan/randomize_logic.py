@@ -678,6 +678,10 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
         sekolah_terpakai = []
         paket_sekolah_dates = {}
         
+        # Track petugas dan penyerta per hari untuk kegiatan STBM (allow_double_luar=True)
+        used_petugas_per_hari = {d.strftime('%Y-%m-%d'): set() for d in work_days}
+        used_penyerta_per_hari = {d.strftime('%Y-%m-%d'): set() for d in work_days}
+        
         for kegiatan_name, config in KEGIATAN_BOK.items():
             freq = config.get('freq', 1)
             petugas_pool = config.get('petugas', [])
@@ -690,10 +694,11 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
             is_sekolah = config.get('is_sekolah', False)
             wajib = config.get('wajib', None)
             paket_dengan = config.get('paket_dengan', None)
+            lokasi_pool = config.get('lokasi_pool', None)
             
             placed = 0
             attempts = 0
-            max_attempts = freq * 100
+            max_attempts = freq * 200
             
             while placed < freq and attempts < max_attempts:
                 attempts += 1
@@ -720,74 +725,62 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
                 tgl_str = tgl_obj.strftime('%Y-%m-%d')
                 
                 # ═══════════════════════════════════════════════════════════════
-                # LOGIKA TRACKING BERDASARKAN allow_double_luar
+                # LOGIKA UNTUK allow_double_luar = True (STBM)
                 # ═══════════════════════════════════════════════════════════════
-                
                 if allow_double_luar:
-                    # Untuk kegiatan yang BOLEH double luar:
-                    # - Tidak track nama di used_luar_per_day
-                    # - Track kombinasi (kegiatan, lokasi) untuk hindari duplikat exact
-                    # - Pilih lokasi yang belum dipakai untuk kegiatan ini di hari ini
+                    # Untuk STBM: bisa multiple di hari yang sama dengan lokasi berbeda
+                    # Yang penting: petugas dan penyerta tidak sama di hari yang sama
                     
-                    # Cari lokasi yang tersedia (belum ada kegiatan ini di lokasi ini hari ini)
-                    available_lokasi = []
-                    if lokasi_fixed:
-                        available_lokasi = [lokasi_fixed]
-                    else:
-                        for lok in LOKASI_LUAR_GEDUNG:
-                            key = (kegiatan_name, lok)
-                            existing_names = double_luar_tracker[tgl_str].get(key, set())
-                            # Lokasi tersedia jika belum ada kegiatan ini di lokasi ini
-                            if len(existing_names) == 0:
-                                available_lokasi.append(lok)
-                    
-                    if not available_lokasi:
-                        # Semua lokasi sudah dipakai untuk kegiatan ini hari ini
+                    # 1. Pilih petugas yang belum dipakai di hari ini
+                    available_petugas = [n for n in petugas_pool if n not in used_petugas_per_hari[tgl_str] and not is_orang_libur(n, tgl_obj)]
+                    if not available_petugas:
                         # Coba hari lain
                         continue
+                    petugas = [random.choice(available_petugas)]
                     
-                    lokasi = random.choice(available_lokasi)
-                    
-                    # Pilih petugas yang belum dipakai untuk kegiatan+lokasi ini di hari ini
-                    key = (kegiatan_name, lokasi)
-                    existing_names = double_luar_tracker[tgl_str].get(key, set())
-                    
-                    petugas = rpf_simple(
-                        [n for n in petugas_pool if n not in existing_names], 
-                        1, 
-                        set(),  # Tidak exclude dari used_luar_per_day
-                        tgl_obj
-                    )
-                    
-                    if not petugas:
+                    # 2. Pilih penyerta yang belum dipakai di hari ini
+                    available_penyerta = [n for n in penyerta_pool if n not in used_penyerta_per_hari[tgl_str] and not is_orang_libur(n, tgl_obj)]
+                    if len(available_penyerta) < count_penyerta:
+                        # Coba hari lain
                         continue
+                    penyerta = random.sample(available_penyerta, count_penyerta)
                     
-                    # Pilih penyerta
-                    penyerta = []
-                    if penyerta_pool and count_penyerta > 0:
-                        exclude = set(petugas)
-                        exclude.update(existing_names)  # Exclude yang sudah di kegiatan+lokasi ini
-                        
-                        # Jika tidak boleh double dalam, exclude juga yang di dalam gedung
-                        if not allow_double_dalam and tgl_str in used_dalam_per_day:
-                            exclude.update(used_dalam_per_day[tgl_str])
-                        
-                        available_penyerta = [n for n in penyerta_pool if n not in exclude and not is_orang_libur(n, tgl_obj)]
-                        
-                        if len(available_penyerta) >= count_penyerta:
-                            penyerta = random.sample(available_penyerta, count_penyerta)
+                    # 3. Pilih lokasi (pastikan tidak sama dengan kegiatan ini di hari yang sama)
+                    if lokasi_fixed:
+                        lokasi = lokasi_fixed
+                    elif lokasi_pool:
+                        # Cari lokasi yang belum dipakai untuk kegiatan ini di hari ini
+                        key = (kegiatan_name, tgl_str)
+                        used_lokasi = double_luar_tracker.get(tgl_str, {}).get(key, set())
+                        available_lokasi = [l for l in lokasi_pool if l not in used_lokasi]
+                        if not available_lokasi:
+                            # Semua lokasi sudah dipakai untuk kegiatan ini hari ini
+                            continue
+                        lokasi = random.choice(available_lokasi)
+                    else:
+                        # Gunakan lokasi biasa
+                        if not lokasi_count:
+                            lokasi = 'Luar Gedung'
                         else:
-                            # Fallback: ambil sebanyak mungkin
-                            if available_penyerta:
-                                penyerta = available_penyerta
-                            else:
-                                continue
+                            lokasi = min(lokasi_count, key=lokasi_count.get)
                     
-                    # Track di double_luar_tracker
+                    # 4. Track semua
                     all_names = petugas + penyerta
+                    
+                    # Track petugas dan penyerta per hari
+                    used_petugas_per_hari[tgl_str].update(petugas)
+                    used_penyerta_per_hari[tgl_str].update(penyerta)
+                    
+                    # Track lokasi per kegiatan per hari
+                    key = (kegiatan_name, tgl_str)
+                    if tgl_str not in double_luar_tracker:
+                        double_luar_tracker[tgl_str] = {}
                     if key not in double_luar_tracker[tgl_str]:
                         double_luar_tracker[tgl_str][key] = set()
-                    double_luar_tracker[tgl_str][key].update(all_names)
+                    double_luar_tracker[tgl_str][key].add(lokasi)
+                    
+                    if lokasi in lokasi_count:
+                        lokasi_count[lokasi] = lokasi_count.get(lokasi, 0) + 1
                     
                 else:
                     # Untuk kegiatan yang TIDAK BOLEH double luar:
@@ -841,7 +834,7 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
                     used_luar_per_day[tgl_str].update(all_names)
                     
                     if lokasi in lokasi_count:
-                        lokasi_count[lokasi] += 1
+                        lokasi_count[lokasi] = lokasi_count.get(lokasi, 0) + 1
                 
                 jadwal_baru.append({
                     'tanggal': tgl_str, 'lokasi': lokasi, 'kegiatan': kegiatan_name,
