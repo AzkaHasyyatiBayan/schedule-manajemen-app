@@ -667,6 +667,9 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
         used_petugas_per_hari = {d.strftime('%Y-%m-%d'): set() for d in work_days}
         used_penyerta_per_hari = {d.strftime('%Y-%m-%d'): set() for d in work_days}
         
+        # Track petugas per kegiatan per hari untuk kegiatan yang BOLEH double petugas
+        used_petugas_per_kegiatan_per_hari = {}
+        
         for kegiatan_name, config in KEGIATAN_BOK.items():
             freq = config.get('freq', 1)
             petugas_pool = config.get('petugas', [])
@@ -684,6 +687,10 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
             placed = 0
             attempts = 0
             max_attempts = freq * 200
+            
+            # Inisialisasi tracker per kegiatan
+            if kegiatan_name not in used_petugas_per_kegiatan_per_hari:
+                used_petugas_per_kegiatan_per_hari[kegiatan_name] = {}
             
             while placed < freq and attempts < max_attempts:
                 attempts += 1
@@ -714,10 +721,31 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
                 # ═══════════════════════════════════════════════════════════════
                 if allow_double_luar:
                     # Untuk kegiatan yang boleh multiple di hari yang sama
-                    # Yang penting: petugas dan penyerta tidak sama di hari yang sama
                     
-                    # 1. Pilih petugas yang belum dipakai di hari ini
-                    available_petugas = [n for n in petugas_pool if n not in used_petugas_per_hari[tgl_str] and not is_orang_libur(n, tgl_obj)]
+                    # CEK KHUSUS UNTUK KAMRT: izinkan petugas yang sama dipakai berkali-kali
+                    is_kamrt = (kegiatan_name == 'Surveilans Kualitas Air Minum Rumah Tangga (KAMRT)')
+                    
+                    if is_kamrt:
+                        # KAMRT: petugas boleh sama di hari yang sama
+                        # Tapi tetap cek apakah petugas sedang libur
+                        available_petugas = [n for n in petugas_pool if not is_orang_libur(n, tgl_obj)]
+                        
+                        # Cek juga apakah petugas ini sudah dipakai di hari yang sama oleh kegiatan LAIN
+                        # (bukan KAMRT), jika iya, skip
+                        petugas_terpakai_lain = []
+                        for petugas in available_petugas:
+                            # Cek apakah petugas ini dipakai oleh kegiatan lain di hari yang sama
+                            # Kita cek di used_petugas_per_hari
+                            if petugas in used_petugas_per_hari[tgl_str]:
+                                # Petugas ini dipakai oleh kegiatan lain, kita skip
+                                petugas_terpakai_lain.append(petugas)
+                        
+                        # Filter petugas yang tidak dipakai oleh kegiatan lain
+                        available_petugas = [n for n in available_petugas if n not in petugas_terpakai_lain]
+                    else:
+                        # Kegiatan lain: petugas tidak boleh sama di hari yang sama
+                        available_petugas = [n for n in petugas_pool if n not in used_petugas_per_hari[tgl_str] and not is_orang_libur(n, tgl_obj)]
+                    
                     if not available_petugas:
                         continue
                     petugas = [random.choice(available_petugas)]
@@ -746,11 +774,9 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
                         used_lokasi = double_luar_tracker.get(tgl_str, {}).get(key, set())
                         available_lokasi = [l for l in lokasi_pool if l not in used_lokasi]
                         if not available_lokasi:
-                            # Semua lokasi sudah dipakai, coba hari lain
                             continue
                         lokasi = random.choice(available_lokasi)
                     else:
-                        # Gunakan lokasi biasa dengan distribusi merata
                         if not lokasi_count:
                             lokasi = 'Luar Gedung'
                         else:
@@ -760,7 +786,9 @@ def generate_jadwal_luar_gedung_bok(bulan, tahun, jadwal_dalam_gedung=None):
                     all_names = petugas + penyerta
                     
                     # Track petugas dan penyerta per hari
-                    used_petugas_per_hari[tgl_str].update(petugas)
+                    # Untuk KAMRT, petugas TIDAK di-track di used_petugas_per_hari (biar bisa dipakai lagi)
+                    if not is_kamrt:
+                        used_petugas_per_hari[tgl_str].update(petugas)
                     used_penyerta_per_hari[tgl_str].update(penyerta)
                     
                     # Track lokasi per kegiatan per hari
