@@ -215,17 +215,18 @@ POOL_PENYERTA_BOK = [
 
 # ─── DEFINISI KEGIATAN BOK ──────────────────────────────────────────────────
 KEGIATAN_BOK = {
-    # 1. ODGJ Berat - allow_double_luar True
+    # 1. ODGJ Berat
     'Pelacakan dan pengawasan minum obat untuk ODGJ Berat': {
         'freq': 25,
         'petugas': ['dr.Ferry Nalapraya', 'drg.Rifan Hanggoro.M.M.R.S'],
-        'penyerta': POOL_PENYERTA_BOK[:12],  # Hanya Bidan + Dede
+        'penyerta': POOL_PENYERTA_BOK[:12],
         'count_penyerta': 1,
         'allow_double_dalam': True,
         'allow_double_luar': True,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 2. Otopsi verbal - allow_double_luar False
+    # 2. Otopsi verbal
     'Pelacakan dan pelaporan kematian dan pelaksanaan otopsi verbal kematian Bayi/balita': {
         'freq': 1,
         'petugas': ['dr.Ferry Nalapraya', 'drg.Rifan Hanggoro.M.M.R.S'],
@@ -233,9 +234,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': False,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 3. Pendampingan stunting - allow_double_luar False
+    # 3. Pendampingan stunting
     'Pendampingan rujukan balita stunting/gizi buruk': {
         'freq': 2,
         'petugas': ['Annisa Fauziah,A.Md.Gz'],
@@ -243,9 +245,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': False,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 4. Sosialisasi Imunisasi - tanggal fixed 27
+    # 4. Sosialisasi Imunisasi
     'Sosialisasi Penyelenggaraan Imunisasi': {
         'freq': 1,
         'petugas': ['Pipit Puspitasari,Am.Keb'],
@@ -255,9 +258,10 @@ KEGIATAN_BOK = {
         'allow_double_luar': False,
         'lokasi_fixed': 'Tamansari',
         'tanggal_fixed': 27,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 5. Deteksi dini - allow_double_luar True, count_penyerta 3
+    # 5. Deteksi dini
     'Deteksi dini dan cek kesehatan gratis di masyarakat': {
         'freq': 14,
         'petugas': POOL_PENYERTA_BOK,
@@ -265,19 +269,21 @@ KEGIATAN_BOK = {
         'count_penyerta': 3,
         'allow_double_dalam': False,
         'allow_double_luar': True,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 6. Pemantauan PTM - allow_double_luar True, petugas terbatas
+    # 6. Pemantauan PTM
     'Pemantauan dan tindak lanjut penyakit tidak menular': {
         'freq': 20,
-        'petugas': POOL_PENYERTA_BOK[:18],  # Sampai Wida
+        'petugas': POOL_PENYERTA_BOK[:18],
         'penyerta': POOL_PENYERTA_BOK,
         'count_penyerta': 1,
         'allow_double_dalam': False,
         'allow_double_luar': True,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 7. IKL fasilitas umum - allow_double_luar True, allow_double_dalam True
+    # 7. IKL fasilitas umum
     'Inspeksi Kesehatan Lingkungan (IKL) di sarana fasilitas umum': {
         'freq': 10,
         'petugas': POOL_PETUGAS_SANITARIAN + POOL_PENYERTA_BOK,
@@ -285,9 +291,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': True,
         'allow_double_luar': True,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 8. IKL TPP - allow_double_luar True, allow_double_dalam True
+    # 8. IKL TPP
     'Inspeksi Kesehatan Lingkungan di Sarana Tempat Pengolahan Pangan (TPP)': {
         'freq': 10,
         'petugas': POOL_PETUGAS_SANITARIAN + POOL_PENYERTA_BOK,
@@ -295,9 +302,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': True,
         'allow_double_luar': True,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 9. IKL Air Minum - allow_double_luar True, allow_double_dalam True
+    # 9. IKL Air Minum
     'Inspeksi Kesehatan Lingkungan di Sarana Air Minum': {
         'freq': 10,
         'petugas': POOL_PETUGAS_SANITARIAN + POOL_PENYERTA_BOK,
@@ -305,9 +313,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': True,
         'allow_double_luar': True,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 10. Pemberdayaan STBM - allow_double_luar True, petugas STBM
+    # 10. Pemberdayaan STBM
     'Pemberdayaan kader masyarakat melalui pemicuan untuk implementasi pilar 2-5 STBM': {
         'freq': 10,
         'petugas': POOL_PETUGAS_STBM,
@@ -316,9 +325,10 @@ KEGIATAN_BOK = {
         'allow_double_dalam': True,
         'allow_double_luar': True,
         'lokasi_pool': LOKASI_STBM,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 11. Monitoring STBM - allow_double_luar True
+    # 11. Monitoring STBM
     'Monitoring Pemberdayaan kader masyarakat melalui pemicuan untuk implementasi pilar 2-5 STBM': {
         'freq': 10,
         'petugas': POOL_PETUGAS_STBM,
@@ -327,9 +337,10 @@ KEGIATAN_BOK = {
         'allow_double_dalam': True,
         'allow_double_luar': True,
         'lokasi_pool': LOKASI_STBM,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 12. Verifikasi STBM - allow_double_luar True
+    # 12. Verifikasi STBM
     'Verifikasi Pemberdayaan kader masyarakat melalui pemicuan untuk implementasi pilar 2-5 STBM': {
         'freq': 14,
         'petugas': POOL_PETUGAS_STBM,
@@ -338,9 +349,10 @@ KEGIATAN_BOK = {
         'allow_double_dalam': True,
         'allow_double_luar': True,
         'lokasi_pool': LOKASI_STBM,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 13. Pemantauan TBC - allow_double_luar False
+    # 13. Pemantauan TBC
     'Pemantauan minum obat dan terapi pencegahan TBC': {
         'freq': 4,
         'petugas': ['Mutia Wulansari.,S.Kep.,Ners'],
@@ -348,9 +360,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': False,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 14. Penemuan Kasus TB - allow_double_luar False
+    # 14. Penemuan Kasus TB
     'Penemuan Kasus Aktif TB': {
         'freq': 4,
         'petugas': ['Mutia Wulansari.,S.Kep.,Ners'],
@@ -358,9 +371,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': False,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 15. Pelacakan Kasus Mangkir - allow_double_luar False
+    # 15. Pelacakan Kasus Mangkir
     'Pelacakan Kasus Mangkir': {
         'freq': 4,
         'petugas': ['Mutia Wulansari.,S.Kep.,Ners'],
@@ -368,9 +382,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': False,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 16. Investigasi TB - allow_double_luar False
+    # 16. Investigasi TB
     'Investigasi Kasus TB': {
         'freq': 4,
         'petugas': ['Mutia Wulansari.,S.Kep.,Ners'],
@@ -378,9 +393,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': False,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 17. Pneumonia - allow_double_luar False
+    # 17. Pneumonia
     'Penemuan kasus dan deteksi dini pneumonia': {
         'freq': 4,
         'petugas': ['Pia Nur Podiana,A.Md.Keb'],
@@ -388,9 +404,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': False,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 18. AFP - allow_double_luar False, tanpa penyerta
+    # 18. AFP - tanpa penyerta
     'Kunjungan ulang 60 hari AFP': {
         'freq': 1,
         'petugas': ['Iman Nurul Haq,A.Md.Kep'],
@@ -398,9 +415,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 0,
         'allow_double_dalam': False,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': False,
     },
 
-    # 19. Penyakit tropis - allow_double_luar False
+    # 19. Penyakit tropis
     'Penemuan dan tindak lanjut penyakit tropis terabaikan': {
         'freq': 4,
         'petugas': ['Mutia Wulansari.,S.Kep.,Ners'],
@@ -408,9 +426,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': False,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 20. Hepatitis B - allow_double_luar False
+    # 20. Hepatitis B
     'Pemantauan bayi usia 9-12 bulan yang lahir dari ibu Hepatitis B': {
         'freq': 1,
         'petugas': ['Oriany Kemala Dewi,Amd.Kep'],
@@ -418,9 +437,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': False,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 21. HIV/Sifilis - allow_double_luar False
+    # 21. HIV/Sifilis
     'Pemantauan status bayi dari ibu positif HIV/sifilis': {
         'freq': 2,
         'petugas': POOL_PENYERTA_BOK,
@@ -428,9 +448,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': False,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 22. Jentik Nyamuk - allow_double_luar False, allow_double_dalam True
+    # 22. Jentik Nyamuk
     'Pemeriksaan Jentik Nyamuk (survei Vektor DBD)': {
         'freq': 4,
         'petugas': ['Nurul Hasanah,A.Md.KL'],
@@ -438,9 +459,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': True,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 23. PSN - allow_double_luar False, allow_double_dalam True
+    # 23. PSN
     'PSN oleh kader G1R1J': {
         'freq': 4,
         'petugas': ['Nurul Hasanah,A.Md.KL'],
@@ -448,9 +470,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': True,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 24. Larvasidasi - allow_double_luar False, allow_double_dalam True
+    # 24. Larvasidasi
     'Larvasidasi DBD': {
         'freq': 4,
         'petugas': ['Nurul Hasanah,A.Md.KL'],
@@ -458,9 +481,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': True,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 25. Fogging - allow_double_luar False, allow_double_dalam True, count_penyerta 2
+    # 25. Fogging
     'Pengasapan Atau Fogging Nyamuk': {
         'freq': 2,
         'petugas': ['Nurul Hasanah,A.Md.KL'],
@@ -468,9 +492,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 2,
         'allow_double_dalam': True,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 26. KAMRT - allow_double_luar True, allow_double_dalam True
+    # 26. KAMRT
     'Surveilans Kualitas Air Minum Rumah Tangga (KAMRT)': {
         'freq': 30,
         'petugas': ['Eko Wahyu Saputro,S.K.M', 'Nurul Hasanah,A.Md.KL'],
@@ -478,9 +503,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': True,
         'allow_double_luar': True,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 27. Epidemiologi - allow_double_luar False, allow_double_dalam True
+    # 27. Epidemiologi
     'Penyelidikan Kasus Epidemiologi Penyakit Kasus Penyakit menular': {
         'freq': 4,
         'petugas': ['Iman Nurul Haq,A.Md.Kep'],
@@ -488,9 +514,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': True,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 28. Verifikasi KLB - allow_double_luar False, allow_double_dalam True
+    # 28. Verifikasi KLB
     'Verifikasi Sinyal penyakit potensial wabah/KLB': {
         'freq': 2,
         'petugas': ['Iman Nurul Haq,A.Md.Kep', 'Nurul Hasanah,A.Md.KL'],
@@ -498,9 +525,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': True,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 29. Arbovirosis - allow_double_luar False, allow_double_dalam True
+    # 29. Arbovirosis
     'Penyelidikan Epidimiologi Penyakit Arbovirosis': {
         'freq': 4,
         'petugas': ['Iman Nurul Haq,A.Md.Kep'],
@@ -508,9 +536,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': True,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 30. Zoonosis - allow_double_luar False, allow_double_dalam True
+    # 30. Zoonosis
     'Penyelidikan Epidimiologi Penyakit Zoonosis': {
         'freq': 2,
         'petugas': ['Iman Nurul Haq,A.Md.Kep'],
@@ -518,9 +547,10 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': True,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
-    # 31. ILP - allow_double_luar False
+    # 31. ILP
     'Pendampingan pelaksanaan ILP di pustu dan Unit Pelayanan Kesehatan Desa/Kelurahan (UPKD/K)': {
         'freq': 1,
         'petugas': ['Rudi Sutikno,SKM'],
@@ -528,6 +558,7 @@ KEGIATAN_BOK = {
         'count_penyerta': 1,
         'allow_double_dalam': False,
         'allow_double_luar': False,
+        'allow_penyerta_jadi_petugas': True,
     },
 
     # ─── SEKOLAH ──────────────────────────────────────────────────────────────
@@ -540,6 +571,7 @@ KEGIATAN_BOK = {
         'allow_double_luar': False,
         'is_sekolah': True,
         'wajib': WAJIB_SEKOLAH,
+        'allow_penyerta_jadi_petugas': True,
     },
 
     'Pembinaan Kesehatan di Sekolah': {
@@ -551,6 +583,7 @@ KEGIATAN_BOK = {
         'allow_double_luar': False,
         'is_sekolah': True,
         'paket_dengan': 'Skrining Kesehatan di Sekolah',
+        'allow_penyerta_jadi_petugas': True,
     },
 }
 
