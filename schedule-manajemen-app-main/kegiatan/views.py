@@ -33,18 +33,19 @@ def auto_sync_hari_libur_if_needed(tahun):
     """
     Cek apakah hari libur untuk tahun tertentu sudah ada di database.
     Jika belum, otomatis sync dari API Nager.Date.
-    Returns: (success: bool, message: str)
     """
-    # Cek apakah sudah ada data hari libur untuk tahun ini
     existing_count = HariLibur.objects.filter(tanggal__year=tahun).count()
     
     if existing_count > 0:
         return True, f"Hari libur tahun {tahun} sudah ada ({existing_count} data)"
     
     try:
-        # Fetch dari API Nager.Date
         url = f"https://date.nager.at/api/v3/PublicHolidays/{tahun}/ID"
         response = requests.get(url, timeout=10)
+        
+        if response.status_code == 404:
+            return False, f"Tahun {tahun} tidak tersedia di API Nager.Date (404)"
+        
         response.raise_for_status()
         
         holidays = response.json()
@@ -54,14 +55,10 @@ def auto_sync_hari_libur_if_needed(tahun):
             tanggal = holiday['date']
             nama_libur = holiday.get('localName', holiday.get('name', 'Hari Libur'))
             
-            # Skip jika sudah ada
             if HariLibur.objects.filter(tanggal=tanggal).exists():
                 continue
             
-            # Tentukan jenis libur
-            jenis = 'nasional'
-            if 'Cuti Bersama' in nama_libur or 'Joint Holiday' in nama_libur:
-                jenis = 'cuti_bersama'
+            jenis = 'cuti_bersama' if 'Cuti Bersama' in nama_libur or 'Joint Holiday' in nama_libur else 'nasional'
             
             HariLibur.objects.create(
                 tanggal=tanggal,
@@ -72,6 +69,8 @@ def auto_sync_hari_libur_if_needed(tahun):
         
         return True, f"Auto-sync berhasil: {created_count} hari libur tahun {tahun} ditambahkan"
     
+    except requests.exceptions.HTTPError as e:
+        return False, f"API error {e.response.status_code}: {str(e)}"
     except Exception as e:
         return False, f"Auto-sync gagal: {str(e)}"
 
